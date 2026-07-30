@@ -833,7 +833,7 @@ function collectHexNotes() {
 }
 
 async function exportHexNotes() {
-  if (!state.settings.anchor) { alert('Calibrate first: alt-click an export button and click the Ritterstadt hex (D5).'); return; }
+  if (!state.settings.anchor) { alert('Calibrate first: alt-click an export button, then click Ritterstadt on the map.'); return; }
   const files = collectHexNotes();
   if (!files.length) { alert('No notes to export yet. Click a hex and add one.'); return; }
 
@@ -901,7 +901,7 @@ $('webBtn').onclick = e => startExport('web', e.altKey);
 $('hexNotesBtn').onclick = e => {
   if (e.altKey || !state.settings.anchor) {
     pendingMode = 'hexnotes'; calibrating = true;
-    alert('One-time calibration: click the RITTERSTADT hex (D5) on your map.');
+    alert('One-time calibration: find Ritterstadt on the map image and click its hex.\nLetter coordinates appear after this.');
     return;
   }
   exportHexNotes();
@@ -912,7 +912,7 @@ function startExport(mode, recal) {
   pendingMode = mode;
   if (!state.settings.anchor || recal) {
     calibrating = true;
-    alert('One-time calibration: click the RITTERSTADT hex (D5) on your map.\n(Alt-click an export button any time to recalibrate.)');
+    alert('One-time calibration: find Ritterstadt on the map image and click its hex.\nLetter coordinates appear after this.\n(Alt-click an export button any time to recalibrate.)');
     return;
   }
   exportMapNote(mode);
@@ -1007,5 +1007,297 @@ load().then(async () => {
   else setStatus(fileHandle ? 'autosaving to ' + (fileHandle.name || 'file') : 'browser only — click Autosave', fileHandle ? 'live' : 'warn');
 });
 </script>
+<!-- ============================================================
+     LEGEND / HELP PANEL
+     Paste immediately before the FINAL closing body tag — the one right
+     after the last closing script tag, not the one inside the Web map
+     export template.
+     Self-contained: no edits to existing markup, no JavaScript.
+     Inherits the app's CSS variables (--panel, --ink, --accent…).
+     ============================================================ -->
+<style>
+  #legend {
+    position: fixed; right: 14px; bottom: 14px; z-index: 40;
+    font-family: Georgia, 'Times New Roman', serif; font-size: 13px;
+    color: var(--ink); max-width: min(360px, calc(100vw - 28px));
+  }
+  #legend > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+    width: fit-content; float: right;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 10px; color: var(--ink);
+  }
+  #legend > summary::-webkit-details-marker { display: none; }
+  #legend > summary:hover { border-color: var(--accent); }
+  #legend > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #legend[open] > summary { background: var(--accent); color: #1b1813; border-color: var(--accent); }
+  #legend .sheet {
+    clear: both; margin-top: 8px; padding: 14px 16px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.55);
+    max-height: min(70vh, 520px); overflow-y: auto;
+  }
+  #legend h2 {
+    font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--accent); font-weight: normal; margin: 0 0 6px;
+  }
+  #legend h2 + * { margin-top: 0; }
+  #legend section + section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  #legend dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+  #legend dt { color: var(--dim); white-space: nowrap; }
+  #legend dd { margin: 0; }
+  #legend kbd {
+    font-family: Georgia, serif; font-size: 12px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 5px;
+  }
+  #legend .swatches { display: flex; gap: 6px; margin: 0; }
+  #legend .swatches i {
+    width: 20px; height: 20px; border-radius: 3px;
+    border: 1px solid var(--border); display: block;
+  }
+  #legend p { margin: 8px 0 0; color: var(--dim); line-height: 1.45; }
+  #legend a { color: var(--accent); }
+  @media (max-width: 640px) { #legend { right: 8px; bottom: 8px; } }
+</style>
+
+<details id="legend">
+  <summary title="Show or hide the legend">Legend</summary>
+  <div class="sheet">
+
+    <section>
+      <h2>Getting around</h2>
+      <dl>
+        <dt>Pan</dt><dd>Drag the map</dd>
+        <dt>Zoom</dt><dd>Scroll wheel</dd>
+        <dt>Open a hex</dt><dd>Click it</dd>
+      </dl>
+      <p>The badge in the corner shows the hex under your cursor as <em>column,row</em>.</p>
+    </section>
+
+    <section>
+      <h2>Writing notes</h2>
+      <dl>
+        <dt><kbd>Ctrl</kbd>+<kbd>Enter</kbd></dt><dd>Save the note</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Close without saving</dd>
+        <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd></dt><dd>Undo</dd>
+        <dt><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></dt><dd>Redo</dd>
+      </dl>
+      <p>Search filters the note list as you type.</p>
+    </section>
+
+    <section>
+      <h2>Markers</h2>
+      <div class="swatches" aria-label="Marker colours">
+        <i style="background:#d4a24e"></i><i style="background:#7fb069"></i>
+        <i style="background:#6a9fd4"></i><i style="background:#d47b6a"></i>
+        <i style="background:#b58ad4"></i><i style="background:#e0e0e0"></i>
+      </div>
+      <p>Colours mean whatever this map says they mean. Pick a scheme and record it in a note so it outlives your memory of it.</p>
+    </section>
+
+    <section>
+      <h2>Where your work lives</h2>
+      <p>In this browser, on this machine, at this address — nowhere else. Clearing site data erases it. Switch on <strong>Autosave&hellip;</strong> to keep a live copy in a real file, and use <strong>Export</strong> for a snapshot you can move somewhere safe.</p>
+    </section>
+
+  </div>
+</details>
+<!-- ===================== END LEGEND ===================== -->
+
+<!-- ============================================================
+     CALIBRATION WATCH
+     Paste immediately before the FINAL closing body tag — the one
+     right after the last closing script tag, not the one inside the
+     Web map export template.
+
+     Records the grid settings in force when the anchor was set, then
+     flags any later change that would silently invalidate the letter
+     coordinates. Reads existing state; writes only settings.calibBase.
+     ============================================================ -->
+<style>
+  #calwatch {
+    position: fixed; left: 14px; bottom: 14px; z-index: 40;
+    font-family: Georgia, 'Times New Roman', serif; font-size: 13px;
+    color: var(--ink); max-width: min(340px, calc(100vw - 28px));
+  }
+  #calwatch > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 7px;
+    width: fit-content; padding: 4px 10px; border-radius: 4px;
+    background: var(--panel2); border: 1px solid var(--border); color: var(--ink);
+  }
+  #calwatch > summary::-webkit-details-marker { display: none; }
+  #calwatch > summary:hover { border-color: var(--accent); }
+  #calwatch > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #calwatch .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+  #calwatch.ok    .dot { background: var(--accent2); }
+  #calwatch.stale .dot { background: #d47b6a; }
+  #calwatch.none  .dot { background: var(--dim); }
+  #calwatch .sheet {
+    margin-top: 8px; padding: 13px 15px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.55);
+    max-height: min(70vh, 460px); overflow-y: auto;
+  }
+  #calwatch h2 {
+    font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--accent); font-weight: normal; margin: 0 0 8px;
+  }
+  #calwatch table { border-collapse: collapse; width: 100%; }
+  #calwatch th {
+    text-align: left; font-weight: normal; color: var(--dim);
+    padding: 2px 10px 2px 0; white-space: nowrap;
+  }
+  #calwatch td { padding: 2px 0; text-align: right; font-variant-numeric: tabular-nums; }
+  #calwatch tr.changed th, #calwatch tr.changed td { color: #d4886a; }
+  #calwatch tr.changed td::after { content: ' \25C0'; font-size: 9px; vertical-align: 2px; }
+  #calwatch .msg { margin: 10px 0 0; line-height: 1.45; color: var(--dim); }
+  #calwatch .msg.warn { color: #d4886a; }
+  #calwatch .row { display: flex; gap: 6px; margin-top: 11px; }
+  #calwatch button { font-size: 12px; padding: 3px 9px; }
+  #calwatch .foot { margin: 9px 0 0; font-size: 11px; color: var(--dim); line-height: 1.4; }
+  @media (max-width: 640px) { #calwatch { left: 8px; bottom: 8px; } }
+</style>
+
+<details id="calwatch" class="none">
+  <summary title="Is the calibration still trustworthy?"><span class="dot"></span>Calibration</summary>
+  <div class="sheet">
+    <h2>Grid settings</h2>
+    <table id="cw-table"></table>
+    <p class="msg" id="cw-msg"></p>
+    <div class="row">
+      <button type="button" id="cw-rebase">Accept as calibrated</button>
+      <button type="button" id="cw-copy">Copy report</button>
+    </div>
+    <p class="foot">Grid colour, opacity, coordinate labels and terrain tint do not affect calibration and are not tracked.</p>
+  </div>
+</details>
+
+<script>
+(function () {
+  // Watched keys: changing any of these moves hexes in tool space, which is
+  // what the anchor is recorded in. Everything else is cosmetic.
+  var KEYS = [
+    ['hexSize', 'Hex size'],
+    ['offX',    'Shift X'],
+    ['offY',    'Shift Y'],
+    ['orient',  'Orientation']
+  ];
+
+  var el   = document.getElementById('calwatch');
+  var tbl  = document.getElementById('cw-table');
+  var msg  = document.getElementById('cw-msg');
+  var last = '';
+  var loggedStale = false;
+
+  function st()  { return (typeof state !== 'undefined' && state) ? state : null; }
+  function cfg() { var s = st(); return (s && s.settings) ? s.settings : null; }
+
+  function snapshot() {
+    var s = cfg(); if (!s) return null;
+    var o = {};
+    KEYS.forEach(function (k) { o[k[0]] = s[k[0]]; });
+    o.mapName = (st() || {}).mapName || null;
+    return o;
+  }
+
+  function render() {
+    var s = cfg(); if (!s) return;
+    var now  = snapshot();
+    var base = s.calibBase || null;
+    var anch = s.anchor || null;
+
+    var rows = [], drift = [];
+
+    if (anch) {
+      rows.push('<tr><th>Anchor hex</th><td>' + anch.col + ',' + anch.row + '</td></tr>');
+    }
+
+    KEYS.forEach(function (k) {
+      var cur = now[k[0]];
+      var changed = base && String(base[k[0]]) !== String(cur);
+      if (changed) drift.push(k[1] + ': ' + base[k[0]] + ' \u2192 ' + cur);
+      rows.push('<tr class="' + (changed ? 'changed' : '') + '"><th>' + k[1] +
+                '</th><td>' + cur + '</td></tr>');
+    });
+
+    var mapChanged = base && String(base.mapName) !== String(now.mapName);
+    if (mapChanged) drift.push('Map image: ' + base.mapName + ' \u2192 ' + now.mapName);
+    rows.push('<tr class="' + (mapChanged ? 'changed' : '') + '"><th>Map image</th><td>' +
+              (now.mapName || '\u2014') + '</td></tr>');
+
+    var p = st() && st().pipeline;
+    if (p && p.cols && p.rows) {
+      rows.push('<tr><th>Pipeline grid</th><td>' + p.cols + ' \u00d7 ' + p.rows + '</td></tr>');
+    }
+
+    tbl.innerHTML = rows.join('');
+
+    if (!anch) {
+      el.className = 'none';
+      msg.className = 'msg';
+      msg.textContent = 'Not calibrated. Alt-click an export button, then click Ritterstadt on the map. Until then hexes stay as NN.NN.';
+      loggedStale = false;
+    } else if (!base) {
+      el.className = 'ok';
+      msg.className = 'msg';
+      msg.textContent = 'Anchor set, but these settings were never recorded as its baseline. If the grid is aligned correctly right now, press Accept as calibrated.';
+      loggedStale = false;
+    } else if (drift.length) {
+      el.className = 'stale';
+      msg.className = 'msg warn';
+      msg.textContent = 'Calibration is stale. ' + drift.length +
+        (drift.length === 1 ? ' setting has' : ' settings have') +
+        ' changed since the anchor was set, so letter coordinates are wrong. Recalibrate, or restore the old values.';
+      if (!loggedStale) {
+        console.warn('[calibration] stale \u2014 ' + drift.join(' | '));
+        loggedStale = true;
+      }
+    } else {
+      el.className = 'ok';
+      msg.className = 'msg';
+      msg.textContent = 'Calibration valid. Grid settings match those in force when the anchor was set.';
+      loggedStale = false;
+    }
+  }
+
+  function rebase() {
+    var s = cfg(); if (!s || !s.anchor) return;
+    s.calibBase = snapshot();
+    if (typeof save === 'function') { try { save(); } catch (e) {} }
+    console.log('[calibration] baseline recorded', s.calibBase);
+    render();
+  }
+
+  document.getElementById('cw-rebase').onclick = rebase;
+
+  document.getElementById('cw-copy').onclick = function () {
+    var s = cfg(); if (!s) return;
+    var txt = 'Calibration report \u2014 ' + new Date().toISOString() + '\n' +
+              'anchor: ' + (s.anchor ? s.anchor.col + ',' + s.anchor.row : 'none') + '\n' +
+              'current:  ' + JSON.stringify(snapshot()) + '\n' +
+              'baseline: ' + JSON.stringify(s.calibBase || null);
+    if (navigator.clipboard) navigator.clipboard.writeText(txt);
+    console.log(txt);
+    this.textContent = 'Copied';
+    setTimeout(function () { this.textContent = 'Copy report'; }.bind(this), 1400);
+  };
+
+  // Auto-record the baseline the first time an anchor appears, so calibrating
+  // normally needs no extra step.
+  setInterval(function () {
+    var s = cfg(); if (!s) return;
+    if (s.anchor && !s.calibBase) { rebase(); return; }
+    var sig = JSON.stringify([snapshot(), s.anchor || null, s.calibBase || null]);
+    if (sig !== last) { last = sig; render(); }
+  }, 400);
+
+  render();
+})();
+</script>
+<!-- ================= END CALIBRATION WATCH ================= -->
+
 </body>
 </html>
