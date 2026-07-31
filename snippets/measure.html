@@ -1,0 +1,365 @@
+<!-- ============================================================
+     MEASURE — distance and travel time
+     Paste immediately before the FINAL closing body tag.
+
+     Click two hexes; get straight-line distance, a least-cost route
+     that respects terrain, and travel time at a chosen pace.
+     Wraps draw() to paint the route. Adds no state the app can't ignore.
+     ============================================================ -->
+<style>
+  #measure {
+    position: fixed; right: 14px; top: 62px; z-index: 41;
+    font-family: Georgia,'Times New Roman',serif; font-size: 13px;
+    color: var(--ink); width: min(300px, calc(100vw - 28px)); display: none;
+  }
+  #measure.on { display: block; }
+  #measure .sheet {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 5px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.55); padding: 13px 15px;
+    max-height: min(76vh, 560px); overflow-y: auto;
+  }
+  #measure h2 {
+    font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--accent); font-weight: normal; margin: 0 0 8px;
+  }
+  #measure .big { font-size: 21px; color: var(--accent); margin: 2px 0 1px; }
+  #measure table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+  #measure th { text-align: left; font-weight: normal; color: var(--dim); padding: 2px 8px 2px 0; white-space: nowrap; }
+  #measure td { text-align: right; padding: 2px 0; font-variant-numeric: tabular-nums; }
+  #measure input, #measure select {
+    background: var(--panel2); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 5px; font-family: inherit; font-size: 12px; width: 68px;
+  }
+  #measure select { width: 100%; }
+  #measure .field { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; color: var(--dim); }
+  #measure section + section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  #measure .hint { color: var(--dim); line-height: 1.45; margin-top: 8px; }
+  #measure .warn { color: #d4886a; }
+  #mTerr { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center; margin-top: 6px; }
+  #mTerr span { color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+  #mTerr input { width: 56px; }
+  #measure .row { display: flex; gap: 6px; margin-top: 10px; }
+  #measure .legs { margin-top: 8px; max-height: 190px; overflow-y: auto; }
+  #measure .legs table { font-size: 12px; }
+  #measure .legs th { color: var(--dim); font-weight: normal; }
+  #measure .legs tr.blocked th, #measure .legs tr.blocked td { color: #d4886a; }
+  #measure .legs td.n { color: var(--dim); text-align: left; width: 1.6em; }
+</style>
+
+<div id="measure">
+  <div class="sheet">
+    <h2>Distance &amp; travel</h2>
+    <div id="mOut"><p class="hint">Click your starting hex, then each stop along the way.</p></div>
+
+    <section>
+      <div class="field"><label for="mMiles">Miles per hex</label><input type="number" id="mMiles" min="0.1" step="0.5" value="6"></div>
+      <div class="field"><label for="mPace">Pace</label></div>
+      <select id="mPace">
+        <option value="18">Slow — 18 miles/day</option>
+        <option value="24" selected>Normal — 24 miles/day</option>
+        <option value="30">Fast — 30 miles/day</option>
+      </select>
+    </section>
+
+    <section>
+      <h2>Terrain cost</h2>
+      <div id="mTerr"></div>
+      <p class="hint">Multipliers against open ground. 0 marks a hex impassable.</p>
+    </section>
+
+    <div class="row">
+      <button type="button" id="mUndo" title="Remove the last waypoint (Backspace)">Undo point</button>
+      <button type="button" id="mReset">Clear</button>
+      <button type="button" id="mClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $$ = function (i) { return document.getElementById(i); };
+  var cvEl = $$('cv'), c2 = cvEl.getContext('2d');
+  var panel = $$('measure');
+  var pts = [], legs = [], mode = false;
+
+  // sensible starting multipliers, matched loosely against terrain names
+  var GUESS = [
+    [/plain|grass|farm|field|steppe|open/i, 1],
+    [/road|trail|track/i, 0.75],
+    [/forest|wood|jungle|taiga/i, 1.5],
+    [/hill|down|upland|badland/i, 1.5],
+    [/mountain|peak|alpine/i, 2],
+    [/swamp|marsh|bog|fen/i, 2],
+    [/desert|dune|waste/i, 1.5],
+    [/tundra|ice|glacier|snow/i, 1.5],
+    [/water|ocean|sea|lake|river/i, 0]
+  ];
+  function guess(name) {
+    for (var i = 0; i < GUESS.length; i++) if (GUESS[i][0].test(name)) return GUESS[i][1];
+    return 1;
+  }
+
+  function cfg() {
+    var s = state.settings;
+    if (!s.travel) s.travel = { miles: 6, pace: 24, costs: {} };
+    return s.travel;
+  }
+
+  function terrains() {
+    var t = (state.pipeline && state.pipeline.terrainColors) ? Object.keys(state.pipeline.terrainColors) : [];
+    return t.sort();
+  }
+
+  function costOf(col, row) {
+    var t = cfg().costs;
+    var h = (typeof pipeHex === 'function') ? pipeHex(col, row) : null;
+    if (!h || !h.terrain) return 1;                 // unmapped ground: assume open
+    var v = t[h.terrain];
+    return (v === undefined) ? guess(h.terrain) : v;
+  }
+
+  // ---- offset <-> cube, matching the app's own layouts ----
+  // flat orientation shifts odd columns down (odd-q); pointy shifts odd rows right (odd-r)
+  function toCube(col, row) {
+    if (state.settings.orient === 'flat') {
+      var q = col, r = row - (col - (col & 1)) / 2;
+      return [q, r, -q - r];
+    }
+    var q2 = col - (row - (row & 1)) / 2;
+    return [q2, row, -q2 - row];
+  }
+  function toOffset(q, r) {
+    if (state.settings.orient === 'flat') return { col: q, row: r + (q - (q & 1)) / 2 };
+    return { col: q + (r - (r & 1)) / 2, row: r };
+  }
+  function hexDist(a, b) {
+    var x = toCube(a.col, a.row), y = toCube(b.col, b.row);
+    return (Math.abs(x[0] - y[0]) + Math.abs(x[1] - y[1]) + Math.abs(x[2] - y[2])) / 2;
+  }
+  var DIRS = [[1,-1,0],[1,0,-1],[0,1,-1],[-1,1,0],[-1,0,1],[0,-1,1]];
+
+  // ---- least-cost route ----
+  function route(a, b) {
+    var pad = 8;
+    var lo = { col: Math.min(a.col, b.col) - pad, row: Math.min(a.row, b.row) - pad };
+    var hi = { col: Math.max(a.col, b.col) + pad, row: Math.max(a.row, b.row) + pad };
+    var inBox = function (o) { return o.col >= lo.col && o.col <= hi.col && o.row >= lo.row && o.row <= hi.row; };
+
+    var key = function (o) { return o.col + ',' + o.row; };
+    var open = [{ o: a, f: 0 }], g = {}, from = {};
+    g[key(a)] = 0;
+    var guard = 0;
+
+    while (open.length && guard++ < 60000) {
+      open.sort(function (m, n) { return m.f - n.f; });
+      var cur = open.shift().o, ck = key(cur);
+      if (ck === key(b)) break;
+      var cube = toCube(cur.col, cur.row);
+      for (var d = 0; d < 6; d++) {
+        var nb = toOffset(cube[0] + DIRS[d][0], cube[1] + DIRS[d][1]);
+        if (!inBox(nb)) continue;
+        var mult = costOf(nb.col, nb.row);
+        if (!(mult > 0)) continue;                   // impassable
+        var nk = key(nb), ng = g[ck] + mult;
+        if (g[nk] === undefined || ng < g[nk]) {
+          g[nk] = ng; from[nk] = cur;
+          open.push({ o: nb, f: ng + hexDist(nb, b) });
+        }
+      }
+    }
+
+    var bk = key(b);
+    if (g[bk] === undefined) return null;
+    var out = [b], cur2 = b;
+    while (key(cur2) !== key(a)) { cur2 = from[key(cur2)]; if (!cur2) return null; out.unshift(cur2); }
+    return { hexes: out, cost: g[bk] };
+  }
+
+  // ---- output ----
+  function nameOf(h) {
+    var L = (typeof letterLabel === 'function') ? letterLabel(h.col, h.row) : null;
+    return L || label(h.col, h.row);
+  }
+
+  function recompute() {
+    legs = [];
+    for (var i = 1; i < pts.length; i++) legs.push(route(pts[i - 1], pts[i]));
+  }
+
+  function fmtTime(days) {
+    if (days < 1) return (days * 8).toFixed(1) + ' hr';
+    return days.toFixed(1) + (days < 2 ? ' day' : ' days');
+  }
+
+  function show() {
+    var out = $$('mOut');
+    if (!pts.length) {
+      out.innerHTML = '<p class="hint">Click your starting hex, then each stop along the way.</p>';
+      return;
+    }
+    if (pts.length === 1) {
+      out.innerHTML = '<p class="hint">Starting at <b>' + nameOf(pts[0]) +
+        '</b>. Click the next stop — add as many as you like to trace a road or skirt a range.</p>';
+      return;
+    }
+
+    var t = cfg(), miles = +t.miles || 6, pace = +t.pace || 24;
+    var totalCost = 0, totalHexes = 0, blocked = 0;
+    var rows = '';
+
+    for (var i = 0; i < legs.length; i++) {
+      var lg = legs[i], a = pts[i], b = pts[i + 1];
+      if (!lg) {
+        blocked++;
+        rows += '<tr class="blocked"><td class="n">' + (i + 1) + '</td><th>' + nameOf(a) + ' \u2192 ' +
+                nameOf(b) + '</th><td>blocked</td></tr>';
+        continue;
+      }
+      var hx = lg.hexes.length - 1;
+      totalCost += lg.cost; totalHexes += hx;
+      rows += '<tr><td class="n">' + (i + 1) + '</td><th>' + nameOf(a) + ' \u2192 ' + nameOf(b) +
+              '</th><td>' + fmtTime(lg.cost * miles / pace) + '</td></tr>';
+    }
+
+    var travelled = totalCost * miles;
+    var straight = hexDist(pts[0], pts[pts.length - 1]);
+
+    out.innerHTML =
+      '<div class="big">' + fmtTime(travelled / pace) + '</div>' +
+      '<table>' +
+      '<tr><th>Stops</th><td>' + pts.length + '</td></tr>' +
+      '<tr><th>Route</th><td>' + totalHexes + ' hex' + (totalHexes === 1 ? '' : 'es') + '</td></tr>' +
+      '<tr><th>Effective</th><td>' + travelled.toFixed(1) + ' mi</td></tr>' +
+      '<tr><th>Direct line</th><td>' + straight + ' hex' + (straight === 1 ? '' : 'es') + '</td></tr>' +
+      '</table>' +
+      '<div class="legs"><table>' + rows + '</table></div>' +
+      (blocked ? '<p class="hint warn">' + blocked + ' leg' + (blocked === 1 ? '' : 's') +
+        ' cannot be routed — impassable terrain. Raise a cost above 0 to open a way through.</p>' : '') +
+      (totalHexes > straight ? '<p class="hint">' + (totalHexes - straight) + ' hex' +
+        (totalHexes - straight === 1 ? '' : 'es') + ' longer than flying it.</p>' : '');
+  }
+
+  function buildTerrainRows() {
+    var host = $$('mTerr'), list = terrains(), t = cfg();
+    host.innerHTML = '';
+    if (!list.length) {
+      host.innerHTML = '<span style="grid-column:1/3">No pipeline loaded — every hex costs 1.</span>';
+      return;
+    }
+    list.forEach(function (name) {
+      if (t.costs[name] === undefined) t.costs[name] = guess(name);
+      var s = document.createElement('span'); s.textContent = name; s.title = name;
+      var i = document.createElement('input');
+      i.type = 'number'; i.min = '0'; i.step = '0.25'; i.value = t.costs[name];
+      i.oninput = function () {
+        t.costs[name] = +this.value;
+        recompute(); show(); draw();
+        save();
+      };
+      host.appendChild(s); host.appendChild(i);
+    });
+  }
+
+  // ---- overlay ----
+  var _draw = draw;
+  draw = function () {
+    _draw();
+    if (!mode || !pts.length) return;
+    c2.save();
+    var dpr = window.devicePixelRatio || 1;
+    c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    legs.forEach(function (lg) {
+      if (!lg || lg.hexes.length < 2) return;
+      c2.beginPath();
+      lg.hexes.forEach(function (h, i) {
+        var ctr = hexCenter(h.col, h.row), p = toScreen(ctr.x, ctr.y);
+        if (i) c2.lineTo(p[0], p[1]); else c2.moveTo(p[0], p[1]);
+      });
+      c2.strokeStyle = '#d4a24e'; c2.lineWidth = 3; c2.lineJoin = 'round';
+      c2.setLineDash([9, 6]); c2.stroke(); c2.setLineDash([]);
+    });
+
+    // blocked legs get a straight red hint so the gap is obvious
+    legs.forEach(function (lg, i) {
+      if (lg) return;
+      var a = hexCenter(pts[i].col, pts[i].row), b = hexCenter(pts[i + 1].col, pts[i + 1].row);
+      var p = toScreen(a.x, a.y), q = toScreen(b.x, b.y);
+      c2.beginPath(); c2.moveTo(p[0], p[1]); c2.lineTo(q[0], q[1]);
+      c2.strokeStyle = '#d47b6a'; c2.lineWidth = 2; c2.setLineDash([3, 5]);
+      c2.stroke(); c2.setLineDash([]);
+    });
+
+    var rad = Math.max(6, state.settings.hexSize * cam.zoom * 0.22);
+    pts.forEach(function (h, i) {
+      var ctr = hexCenter(h.col, h.row), p = toScreen(ctr.x, ctr.y);
+      var last = i === pts.length - 1;
+      c2.beginPath(); c2.arc(p[0], p[1], rad, 0, Math.PI * 2);
+      c2.fillStyle = i === 0 ? '#7fb069' : (last ? '#d47b6a' : '#d4a24e');
+      c2.strokeStyle = '#1b1813'; c2.lineWidth = 2;
+      c2.fill(); c2.stroke();
+      if (pts.length > 2) {
+        c2.fillStyle = '#1b1813';
+        c2.font = 'bold ' + Math.round(rad * 1.1) + 'px Georgia';
+        c2.textAlign = 'center'; c2.textBaseline = 'middle';
+        c2.fillText(String(i + 1), p[0], p[1] + 1);
+      }
+    });
+    c2.restore();
+  };
+
+  // ---- click interception, ahead of the app's own handler ----
+  document.getElementById('canvasWrap').addEventListener('click', function (e) {
+    if (!mode || typeof panned !== 'undefined' && panned) return;
+    var rect = cvEl.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+    e.stopPropagation();
+    var w = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+    var h = pixelToHex(w[0], w[1]);
+    var last = pts[pts.length - 1];
+    if (last && last.col === h.col && last.row === h.row) return;   // ignore a repeat click
+    pts.push({ col: h.col, row: h.row });
+    recompute(); show(); draw();
+  }, true);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && mode) { stop(); }
+    else if (e.key === 'Backspace' && mode &&
+             !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+      e.preventDefault(); pts.pop(); recompute(); show(); draw();
+    }
+    else if (e.key.toLowerCase() === 'm' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+      mode ? stop() : start();
+    }
+  });
+
+  function start() {
+    mode = true; pts = []; legs = [];
+    panel.classList.add('on');
+    var t = cfg();
+    $$('mMiles').value = t.miles; $$('mPace').value = t.pace;
+    buildTerrainRows(); show(); draw();
+    if (typeof setStatus === 'function') setStatus('measuring — click each stop · Backspace undoes · Esc stops', 'live');
+  }
+  function stop() {
+    mode = false; pts = []; legs = [];
+    panel.classList.remove('on'); draw();
+  }
+
+  $$('mMiles').oninput = function () { cfg().miles = +this.value || 6; show(); save(); };
+  $$('mPace').onchange = function () { cfg().pace = +this.value; show(); save(); };
+  $$('mReset').onclick = function () { pts = []; legs = []; show(); draw(); };
+  $$('mUndo').onclick = function () { pts.pop(); recompute(); show(); draw(); };
+  $$('mClose').onclick = stop;
+
+  var host = $$('exportBtn') && $$('exportBtn').parentNode;
+  if (host) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = 'Measure';
+    b.title = 'Distance and travel time between two hexes (M)';
+    b.onclick = function () { mode ? stop() : start(); };
+    host.appendChild(b);
+  }
+})();
+</script>
+<!-- ===================== END MEASURE ===================== -->
