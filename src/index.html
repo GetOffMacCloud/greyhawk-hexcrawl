@@ -1,0 +1,1899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hexcrawl Mapper</title>
+<style>
+  :root {
+    --bg: #1e1b16; --panel: #2a251d; --panel2: #332d23; --ink: #e8e0cf;
+    --dim: #9a8f78; --accent: #d4a24e; --accent2: #7fb069; --border: #4a4234;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: Georgia, 'Times New Roman', serif; background: var(--bg); color: var(--ink); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 2px solid var(--border); font-size: 13px; }
+  header .group { display: flex; gap: 6px; align-items: center; padding-right: 10px; border-right: 1px solid var(--border); }
+  header .group:last-child { border-right: none; }
+  h1 { font-size: 16px; color: var(--accent); margin-right: 6px; letter-spacing: 1px; }
+  button, label.btn { background: var(--panel2); color: var(--ink); border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 13px; }
+  button:hover, label.btn:hover { border-color: var(--accent); }
+  input[type=range] { width: 90px; accent-color: var(--accent); }
+  input[type=color] { width: 26px; height: 22px; border: 1px solid var(--border); background: none; padding: 0; cursor: pointer; }
+  select { background: var(--panel2); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 3px; font-family: inherit; }
+  label { color: var(--dim); }
+  main { flex: 1; display: flex; min-height: 0; }
+  #canvasWrap { flex: 1; position: relative; background: repeating-conic-gradient(#211d17 0% 25%, #1b1813 0% 50%) 0 0/24px 24px; }
+  canvas { position: absolute; inset: 0; cursor: grab; }
+  canvas.panning { cursor: grabbing; }
+  #status { position: absolute; top: 8px; right: 10px; font-size: 12px; padding: 3px 9px; border-radius: 4px;
+    background: rgba(30,27,22,.85); border: 1px solid var(--border); color: var(--dim); pointer-events: none; }
+  #status.live { color: var(--accent2); border-color: var(--accent2); }
+  #status.warn { color: #d4886a; border-color: #6b4a3a; }
+  header button.on { border-color: var(--accent2); color: var(--accent2); }
+  header button:disabled { opacity: .4; cursor: not-allowed; }
+  #hint { position: absolute; bottom: 8px; left: 10px; font-size: 12px; color: var(--dim); pointer-events: none; background: rgba(30,27,22,.75); padding: 3px 8px; border-radius: 4px; }
+  #coordBadge { position: absolute; top: 8px; left: 10px; font-size: 13px; color: var(--accent); pointer-events: none; background: rgba(30,27,22,.8); padding: 3px 10px; border-radius: 4px; display: none; }
+  aside { width: 320px; background: var(--panel); border-left: 2px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  #editor { padding: 12px; border-bottom: 1px solid var(--border); display: none; flex-direction: column; gap: 8px; }
+  #editor.open { display: flex; }
+  #editor h2 { font-size: 15px; color: var(--accent); }
+  #noteTitle { font-size: 14px; }
+  #noteTitle, #noteBody { background: var(--panel2); border: 1px solid var(--border); color: var(--ink); border-radius: 4px; padding: 6px 8px; font-family: inherit; width: 100%; }
+  #noteBody { height: 160px; resize: vertical; font-size: 13px; line-height: 1.45; }
+  .swatches { display: flex; gap: 6px; align-items: center; }
+  .sw { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+  .sw.sel { border-color: var(--ink); }
+  #iconRow { flex-wrap: wrap; }
+  .icoThumb { width: 28px; height: 28px; object-fit: contain; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; background: var(--panel2); text-align: center; line-height: 24px; font-size: 15px; color: var(--dim); position: relative; }
+  .icoThumb.sel { border-color: var(--accent); }
+  .icoThumb:hover .icoDel { display: block; }
+  .icoDel { display: none; position: absolute; top: -7px; right: -7px; width: 14px; height: 14px; line-height: 12px; font-size: 10px; text-align: center; background: #d47b6a; color: #fff; border-radius: 50%; cursor: pointer; }
+  .icoWrap { position: relative; }
+  .editorBtns { display: flex; gap: 8px; }
+  #deleteNote { color: #d47b6a; }
+  #noteList { flex: 1; overflow-y: auto; padding: 10px 12px; }
+  #noteList h2 { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  #search { width: 100%; margin-bottom: 8px; background: var(--panel2); border: 1px solid var(--border); color: var(--ink); border-radius: 4px; padding: 5px 8px; font-family: inherit; }
+  .noteItem { padding: 7px 9px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 6px; cursor: pointer; background: var(--panel2); }
+  .noteItem:hover { border-color: var(--accent); }
+  .noteItem .nt { font-size: 14px; }
+  .noteItem .nc { font-size: 11px; color: var(--dim); }
+  .noteItem .np { font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="group"><h1>&#x2B22; Hexcrawl</h1>
+    <label class="btn">Load map<input type="file" id="mapFile" accept="image/*" hidden></label>
+  </div>
+  <div class="group">
+    <label>Hex size</label><input type="range" id="hexSize" min="3" max="200" value="48" step="0.5">
+    <label>Shift</label><input type="range" id="offX" min="0" max="100" value="0" title="Grid shift X">
+    <input type="range" id="offY" min="0" max="100" value="0" title="Grid shift Y">
+    <select id="orient"><option value="flat">Flat top</option><option value="pointy">Pointy top</option></select>
+  </div>
+  <div class="group">
+    <label>Grid</label><input type="color" id="gridColor" value="#e8e0cf">
+    <input type="range" id="gridAlpha" min="0" max="100" value="45" title="Grid opacity">
+    <label><input type="checkbox" id="showCoords"> coords</label>
+  </div>
+  <div class="group">
+    <label class="btn" title="Load Map Pipeline/map-data.json — terrain colours, regions and Darlene coords">Pipeline<input type="file" id="pipeFile" accept=".json" hidden></label>
+    <label title="Tint hexes by pipeline terrain"><input type="checkbox" id="showTerrain"> terrain</label>
+  </div>
+  <div class="group">
+    <button id="undoBtn" title="Undo (Ctrl+Z)">&#x21B6;</button>
+    <button id="redoBtn" title="Redo (Ctrl+Shift+Z)">&#x21B7;</button>
+  </div>
+  <div class="group">
+    <button id="autosaveBtn" title="Autosave the full bundle to a file on disk. Survives cache clears and browser changes.">Autosave&hellip;</button>
+  </div>
+  <div class="group">
+    <button id="exportBtn">Export</button>
+    <button id="obsidianBtn" title="Generate an Obsidian note: your map + clickable hexes linking to vault notes. Alt-click to recalibrate.">Obsidian note</button>
+    <button id="publishBtn" title="Generate a note for Obsidian Publish: hexes link to your wiki permalinks. Alt-click to recalibrate.">Publish note</button>
+    <button id="webBtn" title="Generate a standalone index.html for GitHub Pages: zoomable map, hexes link to your wiki. Alt-click to recalibrate.">Web map</button>
+    <button id="hexNotesBtn" title="Write hexes/&lt;region&gt;/{x}_{y}.md stubs for the Hexmaker pipeline. Alt-click to recalibrate.">Hex notes</button>
+    <label class="btn">Import<input type="file" id="importFile" accept=".json" hidden></label>
+  </div>
+</header>
+<main>
+  <div id="canvasWrap">
+    <canvas id="cv"></canvas>
+    <div id="coordBadge"></div>
+    <div id="status">browser only</div>
+    <div id="hint">Load a map &bull; drag to pan &bull; scroll to zoom &bull; click a hex to add a note</div>
+  </div>
+  <aside>
+    <div id="editor">
+      <h2 id="editorHex">Hex 00,00</h2>
+      <input id="noteTitle" placeholder="Title (e.g. Ruined Watchtower)">
+      <textarea id="noteBody" placeholder="What's here? Encounters, secrets, rumors..."></textarea>
+      <div class="swatches"><label>Marker:</label></div>
+      <div class="swatches" id="iconRow"><label>Icon:</label></div>
+      <div class="editorBtns">
+        <button id="saveNote">Save</button>
+        <button id="deleteNote">Delete</button>
+        <button id="closeEditor">Close</button>
+      </div>
+    </div>
+    <div id="noteList">
+      <h2>Notes</h2>
+      <input id="search" placeholder="Search notes...">
+      <div id="items"></div>
+    </div>
+  </aside>
+</main>
+<script>
+const SQ3 = Math.sqrt(3);
+const COLORS = ['#d4a24e', '#7fb069', '#6a9fd4', '#d47b6a', '#b58ad4', '#e0e0e0'];
+let state = {
+  settings: { hexSize: 48, offX: 0, offY: 0, orient: 'flat', gridColor: '#e8e0cf', gridAlpha: 45, showCoords: false,
+              showTerrain: false, darleneColOff: 100, darleneRowOff: 57, vaultAnchorX: 4, vaultAnchorY: 5 },
+  notes: {},   // key "col,row" -> {title, body, color, icon}
+  icons: {},   // id -> {name, dataURL}
+  mapName: null, mapDataURL: null,
+  pipeline: null   // { cols, rows, hexSize, terrainColors, hexes:[{x,y,terrain,region,darlene}] }
+};
+let img = null;
+let cam = { x: -60, y: -60, zoom: 1 };
+let selected = null; // "col,row"
+let hover = null;
+
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const wrap = document.getElementById('canvasWrap');
+const $ = id => document.getElementById(id);
+
+// ---------- persistence (IndexedDB — holds large map images, unlike localStorage) ----------
+let db = null;
+function openDB() {
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open('hexcrawl', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+let saveTimer = null;
+function save() { // debounced write of the full state (map image included)
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (db) {
+      try { db.transaction('kv', 'readwrite').objectStore('kv').put(JSON.parse(JSON.stringify(state)), 'state'); } catch (e) {}
+    }
+    // lightweight legacy copy (no map image) so nothing is lost if IndexedDB is unavailable
+    try { localStorage.setItem('hexcrawl-state', JSON.stringify({...state, mapDataURL: null})); } catch (e) {}
+    writeAutosave();
+  }, 200);
+}
+
+// ---------- autosave to a real file (File System Access API) ----------
+// Browser storage is per-origin and one cache-clear from gone. This mirrors every
+// save into a file you pick once, ideally inside Map Pipeline/ so it versions with the vault.
+const FSA = typeof window.showSaveFilePicker === 'function';
+let fileHandle = null, fsaTimer = null, fsaBusy = false, fsaDirty = false;
+
+function setStatus(text, cls) {
+  const el = $('status'); if (!el) return;
+  el.textContent = text;
+  el.className = cls || '';
+}
+function idbPut(key, val) {
+  if (!db) return;
+  try { db.transaction('kv', 'readwrite').objectStore('kv').put(val, key); } catch (e) {}
+}
+function idbGet(key) {
+  if (!db) return Promise.resolve(null);
+  return new Promise(res => {
+    try { const rq = db.transaction('kv').objectStore('kv').get(key); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => res(null); }
+    catch (e) { res(null); }
+  });
+}
+async function verifyPermission(h) {
+  if (!h || !h.queryPermission) return false;
+  const opts = { mode: 'readwrite' };
+  if (await h.queryPermission(opts) === 'granted') return true;
+  if (await h.requestPermission(opts) === 'granted') return true;
+  return false;
+}
+function writeAutosave() {
+  if (!fileHandle) return;
+  fsaDirty = true;
+  clearTimeout(fsaTimer);
+  fsaTimer = setTimeout(flushAutosave, 900);
+}
+async function flushAutosave() {
+  if (!fileHandle || fsaBusy || !fsaDirty) return;
+  fsaBusy = true; fsaDirty = false;
+  try {
+    const w = await fileHandle.createWritable();
+    await w.write(JSON.stringify(state, null, 1));
+    await w.close();
+    const t = new Date();
+    setStatus('saved to file ' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'), 'live');
+  } catch (e) {
+    setStatus('file write failed — click Autosave', 'warn');
+    fileHandle = null;
+  }
+  fsaBusy = false;
+  if (fsaDirty) flushAutosave();
+}
+async function chooseAutosaveFile() {
+  if (!FSA) return;
+  try {
+    fileHandle = await window.showSaveFilePicker({
+      suggestedName: (state.mapName ? state.mapName.replace(/\.[^.]+$/, '') : 'hexcrawl') + '-autosave.json',
+      types: [{ description: 'Hexcrawl bundle', accept: { 'application/json': ['.json'] } }]
+    });
+    idbPut('fileHandle', fileHandle);
+    $('autosaveBtn').classList.add('on');
+    $('autosaveBtn').textContent = 'Autosave: on';
+    fsaDirty = true;
+    flushAutosave();
+  } catch (e) { /* user cancelled */ }
+}
+async function restoreAutosaveHandle() {
+  if (!FSA) { setStatus('browser only — no file autosave', 'warn'); $('autosaveBtn').disabled = true;
+              $('autosaveBtn').title = 'This browser has no File System Access API. Use Export for backups.'; return; }
+  const h = await idbGet('fileHandle');
+  if (!h) { setStatus('browser only — click Autosave', 'warn'); return; }
+  if (await verifyPermission(h)) {
+    fileHandle = h;
+    $('autosaveBtn').classList.add('on');
+    $('autosaveBtn').textContent = 'Autosave: on';
+    setStatus('autosaving to ' + (h.name || 'file'), 'live');
+  } else {
+    setStatus('file access needs re-granting — click Autosave', 'warn');
+  }
+}
+
+// ---------- undo / redo ----------
+// Snapshots cover notes + settings only. Icons and the map image are large and
+// are never mutated destructively, so keeping them out keeps the stack cheap.
+const UNDO_MAX = 60;
+let undoStack = [], redoStack = [];
+function snapshot() { return JSON.stringify({ notes: state.notes, settings: state.settings }); }
+function pushUndo() {
+  const snap = snapshot();
+  if (undoStack.length && undoStack[undoStack.length - 1] === snap) return;
+  undoStack.push(snap);
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+  redoStack.length = 0;
+  syncUndoBtns();
+}
+function applySnapshot(snap) {
+  const p = JSON.parse(snap);
+  state.notes = p.notes;
+  state.settings = { ...state.settings, ...p.settings };
+  syncControls(); renderList(); draw(); save();
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(snapshot());
+  applySnapshot(undoStack.pop());
+  syncUndoBtns();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(snapshot());
+  applySnapshot(redoStack.pop());
+  syncUndoBtns();
+}
+function syncUndoBtns() {
+  const u = $('undoBtn'), r = $('redoBtn');
+  if (u) u.disabled = !undoStack.length;
+  if (r) r.disabled = !redoStack.length;
+}
+async function load() {
+  try { db = await openDB(); } catch (e) {}
+  let p = null;
+  if (db) {
+    p = await new Promise(res => {
+      try { const rq = db.transaction('kv').objectStore('kv').get('state'); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => res(null); }
+      catch (e) { res(null); }
+    });
+  }
+  if (!p) { // first run on IndexedDB: migrate whatever localStorage has
+    try { const s = localStorage.getItem('hexcrawl-state'); if (s) p = JSON.parse(s); } catch (e) {}
+  }
+  if (p) state = {...state, ...p, settings: {...state.settings, ...p.settings}};
+  if (state.mapDataURL) setImage(state.mapDataURL);
+  syncControls();
+  save(); // persist (possibly migrated) state to IndexedDB
+}
+const iconCache = {};
+function getIcon(id) {
+  const rec = state.icons && state.icons[id];
+  if (!rec) return null;
+  if (!iconCache[id]) {
+    const im = new Image();
+    im.onload = () => draw();
+    im.src = rec.dataURL;
+    iconCache[id] = im;
+  }
+  return iconCache[id];
+}
+function setImage(url) {
+  const im = new Image();
+  im.onload = () => { img = im; fitView(); draw(); };
+  im.src = url;
+}
+function fitView() {
+  if (!img) return;
+  const z = Math.min(wrap.clientWidth / img.width, wrap.clientHeight / img.height) * 0.95;
+  cam.zoom = z;
+  cam.x = -(wrap.clientWidth / z - img.width) / 2;
+  cam.y = -(wrap.clientHeight / z - img.height) / 2;
+}
+
+// ---------- hex math ----------
+function hexCenter(col, row) {
+  const s = state.settings, sz = s.hexSize;
+  if (s.orient === 'flat')
+    return { x: sz * 1.5 * col + s.offX, y: sz * SQ3 * (row + 0.5 * (Math.abs(col) % 2)) + s.offY };
+  return { x: sz * SQ3 * (col + 0.5 * (Math.abs(row) % 2)) + s.offX, y: sz * 1.5 * row + s.offY };
+}
+function hexCorner(cx, cy, i) {
+  const sz = state.settings.hexSize;
+  const a = state.settings.orient === 'flat' ? Math.PI / 3 * i : Math.PI / 3 * i + Math.PI / 6;
+  return [cx + sz * Math.cos(a), cy + sz * Math.sin(a)];
+}
+function pixelToHex(x, y) {
+  const s = state.settings, sz = s.hexSize;
+  x -= s.offX; y -= s.offY;
+  let q, r;
+  if (s.orient === 'flat') { q = (2 / 3 * x) / sz; r = (-1 / 3 * x + SQ3 / 3 * y) / sz; }
+  else { q = (SQ3 / 3 * x - 1 / 3 * y) / sz; r = (2 / 3 * y) / sz; }
+  // cube round
+  let cx = q, cz = r, cy = -cx - cz;
+  let rx = Math.round(cx), ry = Math.round(cy), rz = Math.round(cz);
+  const dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz);
+  if (dx > dy && dx > dz) rx = -ry - rz; else if (dy > dz) ry = -rx - rz; else rz = -rx - ry;
+  // axial -> odd-offset
+  if (s.orient === 'flat') return { col: rx, row: rz + (rx - (rx & 1)) / 2 };
+  return { col: rx + (rz - (rz & 1)) / 2, row: rz };
+}
+function offsetToAxial(col, row) {
+  if (state.settings.orient === 'flat') return { q: col, r: row - (col - (col & 1)) / 2 };
+  return { q: col - (row - (row & 1)) / 2, r: row };
+}
+// ---------- pipeline dataset + coordinate reconciliation ----------
+// Three grids reconcile through Ritterstadt: D5 = vault 4_5 = Darlene 104.62.
+// The anchor is the tool-space hex the user clicked during calibration.
+let pipeIndex = null;
+function buildPipeIndex() {
+  pipeIndex = {};
+  if (!state.pipeline || !state.pipeline.hexes) return;
+  state.pipeline.hexes.forEach(h => { pipeIndex[h.x + '_' + h.y] = h; });
+}
+function vaultCoord(col, row) {
+  const a = state.settings.anchor;
+  if (!a) return null;
+  const s = state.settings;
+  return { x: col + ((s.vaultAnchorX || 4) - a.col), y: row + ((s.vaultAnchorY || 5) - a.row) };
+}
+function letterLabel(col, row) {
+  const v = vaultCoord(col, row);
+  if (!v || v.x < 1 || v.x > 26 || v.y < 1) return null;
+  // if the pipeline defines the grid, hexes outside it are not vault hexes
+  const p = state.pipeline;
+  if (p && p.cols && p.rows && (v.x > p.cols || v.y > p.rows)) return null;
+  return String.fromCharCode(64 + v.x) + v.y;
+}
+function darleneLabel(col, row) {
+  const v = vaultCoord(col, row);
+  if (!v) return null;
+  const s = state.settings;
+  // prefer the value the pipeline actually recorded; fall back to the arithmetic
+  const rec = pipeIndex && pipeIndex[v.x + '_' + v.y];
+  if (rec && rec.darlene) return rec.darlene;
+  return (v.x + (s.darleneColOff != null ? s.darleneColOff : 100)) + '.' +
+         (v.y + (s.darleneRowOff != null ? s.darleneRowOff : 57));
+}
+function pipeHex(col, row) {
+  const v = vaultCoord(col, row);
+  if (!v || !pipeIndex) return null;
+  return pipeIndex[v.x + '_' + v.y] || null;
+}
+function terrainColor(col, row) {
+  const h = pipeHex(col, row);
+  if (!h || !state.pipeline.terrainColors) return null;
+  return state.pipeline.terrainColors[h.terrain] || null;
+}
+
+function label(col, row) {
+  const p = n => (n < 0 ? '-' : '') + String(Math.abs(n)).padStart(2, '0');
+  return p(col) + '.' + p(row);
+}
+
+// ---------- drawing ----------
+function toScreen(wx, wy) { return [(wx - cam.x) * cam.zoom, (wy - cam.y) * cam.zoom]; }
+function toWorld(sx, sy) { return [sx / cam.zoom + cam.x, sy / cam.zoom + cam.y]; }
+
+function draw() {
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== W * dpr || cv.height !== H * dpr) {
+    cv.width = W * dpr; cv.height = H * dpr;
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.save();
+  ctx.scale(cam.zoom, cam.zoom);
+  ctx.translate(-cam.x, -cam.y);
+
+  if (img) ctx.drawImage(img, 0, 0);
+
+  const s = state.settings, sz = s.hexSize;
+  const [wx0, wy0] = toWorld(0, 0), [wx1, wy1] = toWorld(W, H);
+  // grid bounds: if a map is loaded, clip grid roughly to it (plus a margin); else cover viewport
+  let gx0 = wx0, gy0 = wy0, gx1 = wx1, gy1 = wy1;
+  if (img) { gx0 = Math.max(gx0, -sz); gy0 = Math.max(gy0, -sz); gx1 = Math.min(gx1, img.width + sz); gy1 = Math.min(gy1, img.height + sz); }
+
+  let c0, c1, r0, r1;
+  if (s.orient === 'flat') {
+    c0 = Math.floor((gx0 - s.offX) / (sz * 1.5)) - 1; c1 = Math.ceil((gx1 - s.offX) / (sz * 1.5)) + 1;
+    r0 = Math.floor((gy0 - s.offY) / (sz * SQ3)) - 1; r1 = Math.ceil((gy1 - s.offY) / (sz * SQ3)) + 1;
+  } else {
+    c0 = Math.floor((gx0 - s.offX) / (sz * SQ3)) - 1; c1 = Math.ceil((gx1 - s.offX) / (sz * SQ3)) + 1;
+    r0 = Math.floor((gy0 - s.offY) / (sz * 1.5)) - 1; r1 = Math.ceil((gy1 - s.offY) / (sz * 1.5)) + 1;
+  }
+  if ((c1 - c0) * (r1 - r0) > 40000) { ctx.restore(); return; } // zoomed way out, skip grid
+
+  ctx.lineWidth = Math.max(1 / cam.zoom, 0.75);
+  ctx.strokeStyle = s.gridColor;
+  ctx.globalAlpha = s.gridAlpha / 100;
+  ctx.font = (sz * 0.28) + 'px Georgia';
+  ctx.textAlign = 'center';
+
+  for (let col = c0; col <= c1; col++) {
+    for (let row = r0; row <= r1; row++) {
+      const { x, y } = hexCenter(col, row);
+      if (gx1 !== null && (x < gx0 - sz || x > gx1 + sz || y < gy0 - sz || y > gy1 + sz)) continue;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) { const [px, py] = hexCorner(x, y, i); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      ctx.closePath();
+      const key = col + ',' + row, note = state.notes[key];
+      if (s.showTerrain) {
+        const tc = terrainColor(col, row);
+        if (tc) { ctx.save(); ctx.globalAlpha = 0.34; ctx.fillStyle = tc; ctx.fill(); ctx.restore(); }
+      }
+      if (note) { ctx.save(); ctx.globalAlpha = 0.28; ctx.fillStyle = note.color || COLORS[0]; ctx.fill(); ctx.restore(); }
+      if (key === selected) { ctx.save(); ctx.globalAlpha = 1; ctx.lineWidth = 3 / cam.zoom; ctx.strokeStyle = '#ffffff'; ctx.stroke(); ctx.restore(); }
+      else if (key === hover) { ctx.save(); ctx.globalAlpha = 0.9; ctx.lineWidth = 2 / cam.zoom; ctx.stroke(); ctx.restore(); }
+      else ctx.stroke();
+      if (s.showCoords) {
+        ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = s.gridColor;
+        const LL = letterLabel(col, row);
+        ctx.fillText(LL || label(col, row), x, y - sz * 0.55);
+        if (LL && sz > 26) {
+          ctx.globalAlpha = 0.38; ctx.font = (sz * 0.20) + 'px Georgia';
+          ctx.fillText(darleneLabel(col, row) || '', x, y - sz * 0.32);
+          ctx.font = (sz * 0.28) + 'px Georgia';
+        }
+        ctx.restore();
+      }
+      if (note) { // marker: custom icon image, or a mini hex in the note color
+        ctx.save(); ctx.globalAlpha = 1;
+        const ic = note.icon ? getIcon(note.icon) : null;
+        if (ic && ic.complete && ic.naturalWidth) {
+          // fill the hex exactly: cover its bounding box, clipped to the hex shape
+          const hw = s.orient === 'flat' ? 2 * sz : SQ3 * sz;
+          const hh = s.orient === 'flat' ? SQ3 * sz : 2 * sz;
+          const ar = ic.naturalWidth / ic.naturalHeight;
+          let w = hw, h = hw / ar;
+          if (h < hh) { h = hh; w = hh * ar; }
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) { const [px, py] = hexCorner(x, y, i); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(ic, x - w / 2, y - h / 2, w, h);
+        } else {
+          const ms = Math.max(sz * 0.32, 4);
+          ctx.fillStyle = note.color || COLORS[0];
+          ctx.strokeStyle = 'rgba(0,0,0,.55)';
+          ctx.lineWidth = Math.max(1 / cam.zoom, 0.75);
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const a = s.orient === 'flat' ? Math.PI / 3 * i : Math.PI / 3 * i + Math.PI / 6;
+            const px = x + ms * Math.cos(a), py = y + ms * Math.sin(a);
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+          }
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+// ---------- interaction ----------
+let dragging = false, panned = false, last = null;
+cv.addEventListener('mousedown', e => { dragging = true; panned = false; last = [e.clientX, e.clientY]; });
+window.addEventListener('mouseup', () => { dragging = false; cv.classList.remove('panning'); });
+cv.addEventListener('mousemove', e => {
+  const rect = cv.getBoundingClientRect();
+  if (dragging) {
+    const dx = e.clientX - last[0], dy = e.clientY - last[1];
+    if (Math.abs(dx) + Math.abs(dy) > 2) { panned = true; cv.classList.add('panning'); }
+    cam.x -= dx / cam.zoom; cam.y -= dy / cam.zoom;
+    last = [e.clientX, e.clientY];
+    draw(); return;
+  }
+  const [wx, wy] = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const h = pixelToHex(wx, wy), key = h.col + ',' + h.row;
+  if (key !== hover) { hover = key; draw(); }
+  const badge = $('coordBadge');
+  badge.style.display = 'block';
+  const n = state.notes[key];
+  const parts = ['Hex ' + label(h.col, h.row)];
+  const LL = letterLabel(h.col, h.row);
+  if (LL) parts.push(LL);
+  const D = darleneLabel(h.col, h.row);
+  if (D) parts.push('Darlene ' + D);
+  const ph = pipeHex(h.col, h.row);
+  if (ph && ph.terrain) parts.push(ph.terrain);
+  badge.textContent = parts.join('  \u00b7  ') + (n && n.title ? '  \u2014  ' + n.title : '');
+});
+cv.addEventListener('mouseleave', () => { hover = null; $('coordBadge').style.display = 'none'; draw(); });
+cv.addEventListener('click', e => {
+  if (panned) return;
+  const rect = cv.getBoundingClientRect();
+  const [wx, wy] = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const h = pixelToHex(wx, wy);
+  if (calibrating) {
+    calibrating = false;
+    state.settings.anchor = { col: h.col, row: h.row };
+    save(); draw();
+    if (pendingMode === 'hexnotes') exportHexNotes();
+    else exportMapNote(pendingMode || 'obsidian');
+    return;
+  }
+  openEditor(h.col + ',' + h.row);
+});
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const [wx, wy] = toWorld(mx, my);
+  cam.zoom *= e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  cam.zoom = Math.min(Math.max(cam.zoom, 0.05), 12);
+  cam.x = wx - mx / cam.zoom; cam.y = wy - my / cam.zoom;
+  draw();
+}, { passive: false });
+
+// ---------- editor ----------
+let editColor = COLORS[0];
+let editIcon = null;
+function buildIconRow() {
+  const holder = $('iconRow');
+  holder.querySelectorAll('.icoWrap, .icoThumb').forEach(x => x.remove());
+  // "none" option
+  const none = document.createElement('div');
+  none.className = 'icoThumb' + (editIcon ? '' : ' sel');
+  none.textContent = '—'; none.title = 'No icon (colored hex marker)';
+  none.onclick = () => { editIcon = null; buildIconRow(); };
+  holder.appendChild(none);
+  // saved icons
+  Object.keys(state.icons || {}).forEach(id => {
+    const w = document.createElement('div'); w.className = 'icoWrap';
+    const im = document.createElement('img');
+    im.className = 'icoThumb' + (editIcon === id ? ' sel' : '');
+    im.src = state.icons[id].dataURL; im.title = state.icons[id].name;
+    im.onclick = () => { editIcon = id; buildIconRow(); };
+    const del = document.createElement('div');
+    del.className = 'icoDel'; del.textContent = '×'; del.title = 'Remove this icon';
+    del.onclick = e => {
+      e.stopPropagation();
+      pushUndo();
+      delete state.icons[id]; delete iconCache[id];
+      Object.values(state.notes).forEach(n => { if (n.icon === id) delete n.icon; });
+      if (editIcon === id) editIcon = null;
+      save(); buildIconRow(); renderList(); draw();
+    };
+    w.appendChild(im); w.appendChild(del);
+    holder.appendChild(w);
+  });
+  // add button
+  const add = document.createElement('label');
+  add.className = 'icoThumb'; add.textContent = '+'; add.title = 'Load custom marker image(s)';
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.hidden = true;
+  inp.onchange = e => {
+    [...e.target.files].forEach(f => {
+      const rd = new FileReader();
+      rd.onload = () => {
+        const id = 'ic' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        state.icons[id] = { name: f.name, dataURL: rd.result };
+        editIcon = id;
+        save(); buildIconRow(); draw();
+      };
+      rd.readAsDataURL(f);
+    });
+  };
+  add.appendChild(inp);
+  holder.appendChild(add);
+}
+function buildSwatches() {
+  const holder = document.querySelector('.swatches');
+  COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'sw'; d.style.background = c;
+    d.onclick = () => { editColor = c; document.querySelectorAll('.sw').forEach(x => x.classList.remove('sel')); d.classList.add('sel'); };
+    holder.appendChild(d);
+  });
+}
+function openEditor(key) {
+  selected = key;
+  const [c, r] = key.split(',').map(Number);
+  $('editorHex').textContent = 'Hex ' + label(c, r);
+  const n = state.notes[key] || { title: '', body: '', color: COLORS[0] };
+  $('noteTitle').value = n.title; $('noteBody').value = n.body;
+  editColor = n.color || COLORS[0];
+  editIcon = n.icon || null;
+  buildIconRow();
+  document.querySelectorAll('.sw').forEach(x => x.classList.toggle('sel', rgb2hex(x.style.background) === editColor));
+  $('editor').classList.add('open');
+  $('noteTitle').focus();
+  draw();
+}
+function rgb2hex(s) {
+  const m = s.match(/\d+/g); if (!m) return s;
+  return '#' + m.slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('');
+}
+$('saveNote').onclick = () => {
+  if (!selected) return;
+  pushUndo();
+  const t = $('noteTitle').value.trim(), b = $('noteBody').value.trim();
+  if (!t && !b && !editIcon) delete state.notes[selected];
+  else state.notes[selected] = { title: t, body: b, color: editColor, ...(editIcon ? { icon: editIcon } : {}) };
+  save(); renderList(); draw();
+};
+$('deleteNote').onclick = () => { if (selected) { pushUndo(); delete state.notes[selected]; save(); renderList(); closeEd(); } };
+$('closeEditor').onclick = closeEd;
+function closeEd() { $('editor').classList.remove('open'); selected = null; draw(); }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeEd();
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') $('saveNote').click();
+  const typing = /^(INPUT|TEXTAREA)$/.test((e.target.tagName || '').toUpperCase());
+  if ((e.ctrlKey || e.metaKey) && !typing) {
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+  }
+});
+$('undoBtn').onclick = undo;
+$('redoBtn').onclick = redo;
+$('autosaveBtn').onclick = chooseAutosaveFile;
+
+// ---------- note list ----------
+function renderList() {
+  const q = $('search').value.toLowerCase();
+  const holder = $('items'); holder.innerHTML = '';
+  const keys = Object.keys(state.notes).sort();
+  keys.forEach(key => {
+    const n = state.notes[key];
+    if (q && !(n.title + ' ' + n.body).toLowerCase().includes(q)) return;
+    const [c, r] = key.split(',').map(Number);
+    const d = document.createElement('div');
+    d.className = 'noteItem';
+    const mark = n.icon && state.icons[n.icon]
+      ? '<img class="dot" style="border-radius:0;width:14px;height:14px;object-fit:contain" src="' + state.icons[n.icon].dataURL + '">'
+      : '<span class="dot" style="background:' + (n.color || COLORS[0]) + '"></span>';
+    d.innerHTML = '<div class="nt">' + mark +
+      (n.title ? esc(n.title) : '<em>untitled</em>') + '</div><div class="nc">Hex ' + label(c, r) + '</div>' +
+      (n.body ? '<div class="np">' + esc(n.body) + '</div>' : '');
+    d.onclick = () => { centerOn(c, r); openEditor(key); };
+    holder.appendChild(d);
+  });
+  if (!keys.length) holder.innerHTML = '<div style="color:var(--dim);font-size:13px">Click a hex on the map to add your first note.</div>';
+}
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function centerOn(col, row) {
+  const { x, y } = hexCenter(col, row);
+  cam.x = x - wrap.clientWidth / 2 / cam.zoom;
+  cam.y = y - wrap.clientHeight / 2 / cam.zoom;
+  draw();
+}
+$('search').oninput = renderList;
+
+// ---------- controls ----------
+function syncControls() {
+  const s = state.settings;
+  $('hexSize').value = s.hexSize; $('offX').value = s.offX; $('offY').value = s.offY;
+  $('orient').value = s.orient; $('gridColor').value = s.gridColor;
+  $('gridAlpha').value = s.gridAlpha; $('showCoords').checked = s.showCoords;
+  if ($('showTerrain')) $('showTerrain').checked = !!s.showTerrain;
+  $('offX').max = $('offY').max = 300;
+}
+function bind(id, prop, num) {
+  const el = $(id);
+  // snapshot once at the start of a drag, not on every input event
+  el.addEventListener('pointerdown', pushUndo);
+  el.addEventListener('focus', pushUndo);
+  el.addEventListener('input', e => {
+    state.settings[prop] = num ? +e.target.value : (e.target.type === 'checkbox' ? e.target.checked : e.target.value);
+    save(); draw();
+  });
+}
+bind('hexSize', 'hexSize', true); bind('offX', 'offX', true); bind('offY', 'offY', true);
+bind('orient', 'orient'); bind('gridColor', 'gridColor'); bind('gridAlpha', 'gridAlpha', true);
+bind('showCoords', 'showCoords');
+bind('showTerrain', 'showTerrain');
+
+$('mapFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { state.mapName = f.name; state.mapDataURL = rd.result; setImage(rd.result); save(); };
+  rd.readAsDataURL(f);
+});
+
+// ---------- export / import ----------
+$('exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (state.mapName ? state.mapName.replace(/\.[^.]+$/, '') : 'hexcrawl') + '-notes.json';
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('importFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const p = JSON.parse(rd.result);
+      pushUndo();
+      state = { ...state, ...p, settings: { ...state.settings, ...p.settings } };
+      buildPipeIndex();
+      if (state.mapDataURL) setImage(state.mapDataURL);
+      save(); syncControls(); renderList(); draw();
+    } catch (err) { alert('Could not read that file.'); }
+  };
+  rd.readAsText(f);
+});
+
+// ---------- pipeline dataset (map-data.json) ----------
+// Over http(s) we fetch it. Over file:// the browser blocks that, so the
+// Pipeline button takes the file by hand. Either way it lands in state.pipeline.
+function adoptPipeline(obj, quiet) {
+  if (!obj || !Array.isArray(obj.hexes)) { if (!quiet) alert('That does not look like map-data.json.'); return false; }
+  state.pipeline = obj;
+  buildPipeIndex();
+  save(); draw();
+  if (!quiet) {
+    const n = obj.hexes.length, t = Object.keys(obj.terrainColors || {}).length;
+    setStatus('pipeline: ' + n + ' hexes, ' + t + ' terrains', 'live');
+  }
+  return true;
+}
+$('pipeFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { try { adoptPipeline(JSON.parse(rd.result)); } catch (err) { alert('Could not parse that JSON.'); } };
+  rd.readAsText(f);
+});
+async function tryFetchPipeline() {
+  if (location.protocol === 'file:') return;          // fetch is blocked on file://
+  for (const p of ['Map Pipeline/map-data.json', 'map-data.json', '../Map Pipeline/map-data.json']) {
+    try {
+      const r = await fetch(p, { cache: 'no-store' });
+      if (!r.ok) continue;
+      if (adoptPipeline(await r.json(), true)) {
+        setStatus('pipeline: ' + state.pipeline.hexes.length + ' hexes' + (fileHandle ? ' \u00b7 autosaving' : ''), 'live');
+        return;
+      }
+    } catch (e) { /* try the next path */ }
+  }
+}
+
+// ---------- hex note export ----------
+// Writes hexes/<region>/{x}_{y}.md stubs in the Hexmaker shape so hand-drawn
+// work can feed the generator. Directory picker where available; one bundled
+// markdown file otherwise.
+const HEX_SECTIONS = ['description', 'landmark', 'Towns', 'Dungeons', 'Features', 'Quests',
+                      'Factions', 'Encounters Table', 'hidden', 'secret', 'weather', 'hooks & rumors'];
+
+function hexNoteBody(col, row) {
+  const ph = pipeHex(col, row);
+  const note = state.notes[col + ',' + row];
+  const v = vaultCoord(col, row);
+  const dar = darleneLabel(col, row);
+  const terrain = (ph && ph.terrain) || '';
+  const region = (ph && ph.region) || terrain || 'West Marches';
+  let out = '---\n';
+  if (dar) out += 'darlene: "' + dar + '"\n';
+  if (terrain) out += 'terrain: ' + terrain + '\n';
+  out += 'region: ' + region + '\n';
+  out += '---\n\n';
+  HEX_SECTIONS.forEach(sec => {
+    out += '### ' + sec + '\n';
+    if (sec === 'description' && note) {
+      if (note.title) out += '**' + note.title + '**' + (note.body ? ' — ' : '') ;
+      if (note.body) out += note.body.replace(/\r/g, '');
+      out += '\n';
+    }
+    out += '\n';
+  });
+  return { name: (v ? v.x + '_' + v.y : col + '_' + row) + '.md', region: region, text: out };
+}
+
+function collectHexNotes() {
+  const files = [];
+  Object.keys(state.notes).forEach(key => {
+    const [c, r] = key.split(',').map(Number);
+    const v = vaultCoord(c, r);
+    if (!v || v.x < 1 || v.y < 1) return;             // outside the vault grid
+    files.push(hexNoteBody(c, r));
+  });
+  return files.sort((a, b) => (a.region + a.name).localeCompare(b.region + b.name));
+}
+
+async function exportHexNotes() {
+  if (!state.settings.anchor) { alert('Calibrate first: alt-click an export button, then click your anchor location hex.'); return; }
+  const files = collectHexNotes();
+  if (!files.length) { alert('No notes to export yet. Click a hex and add one.'); return; }
+
+  if (typeof window.showDirectoryPicker === 'function') {
+    let root;
+    try { root = await window.showDirectoryPicker({ mode: 'readwrite' }); } catch (e) { return; }
+    let written = 0, skipped = 0;
+    for (const f of files) {
+      try {
+        const dir = await root.getDirectoryHandle(f.region.replace(/[\\/:*?"<>|]/g, '-'), { create: true });
+        let exists = false;
+        try { await dir.getFileHandle(f.name); exists = true; } catch (e) {}
+        if (exists) { skipped++; continue; }           // never clobber an authored hex note
+        const fh = await dir.getFileHandle(f.name, { create: true });
+        const w = await fh.createWritable();
+        await w.write(f.text); await w.close();
+        written++;
+      } catch (e) { skipped++; }
+    }
+    setStatus('hex notes: ' + written + ' written, ' + skipped + ' skipped', 'live');
+    alert('Wrote ' + written + ' hex note(s).' + (skipped ? '\n' + skipped + ' skipped — a note already existed there and was left alone.' : ''));
+    return;
+  }
+
+  // fallback: one bundle the user splits by hand
+  let bundle = '# Hex note bundle\n\nOne note per block. Create each file at the path in its heading.\n';
+  files.forEach(f => {
+    bundle += '\n\n' + '<!-- ==== hexes/' + f.region + '/' + f.name + ' ==== -->\n\n' + f.text;
+  });
+  const blob = new Blob([bundle], { type: 'text/markdown' });
+  const el = document.createElement('a');
+  el.href = URL.createObjectURL(blob);
+  el.download = 'hex-notes-bundle.md';
+  el.click(); URL.revokeObjectURL(el.href);
+  setStatus('hex notes: bundle downloaded (' + files.length + ')', 'live');
+}
+
+// ---------- obsidian / publish note export ----------
+const OBSIDIAN_VAULT = 'A Tourist In Greyhawk';
+const HEX_NOTE_DIR = 'Greyhawk University/02. Geography & Atlas/Hexmaker World/hexes/West Marches/';
+const POI_DIR = 'Greyhawk University/02. Geography & Atlas/Hex POIs/';
+const POI_NOTES = {
+  A2: 'A2 - The Frozen Library', B2: 'B2 - The Mire-Sunk Chapel', B6: 'B6 - The Drowned Bell',
+  C1: 'C1 - The Sevenfold Hush', C2: "C2 - Greldannor's Tooth", D3: 'D3 - Drowned Kessmark',
+  D4: 'D4 - The Rust Seams', E3: 'E3 - Ochre Escarpment', F2: 'F2 - The Weeping Cairns',
+  F6: 'F6 - The Antler Throne', G5: 'G5 - The Standing Stones', H4: 'H4 - The Glassed Hollow',
+  H7: 'H7 - The Verdigris Tomb', I6: 'I6 - The Marrowstone Reach', J8: "J8 - Ehlonna's Mount"
+};
+const TOWN_NOTE = 'Greyhawk University/05. The Hamlet of Ritterstadt/05. The Hamlet of Ritterstadt';
+const POI_PERMALINKS = {
+  A2: '/greyhawk-university/atlas/poi/a2-frozen-library', B2: '/greyhawk-university/atlas/poi/b2-mire-sunk-chapel',
+  B6: '/greyhawk-university/atlas/poi/b6-drowned-bell', C1: '/greyhawk-university/atlas/poi/c1-sevenfold-hush',
+  C2: '/greyhawk-university/atlas/poi/c2-greldannors-tooth', D3: '/greyhawk-university/atlas/poi/d3-drowned-kessmark',
+  D4: '/greyhawk-university/atlas/poi/d4-rust-seams', E3: '/greyhawk-university/atlas/poi/e3-ochre-escarpment',
+  F2: '/greyhawk-university/atlas/poi/f2-weeping-cairns', F6: '/greyhawk-university/atlas/poi/f6-antler-throne',
+  G5: '/greyhawk-university/atlas/poi/g5-standing-stones', H4: '/greyhawk-university/atlas/poi/h4-glassed-hollow',
+  H7: '/greyhawk-university/atlas/poi/h7-verdigris-tomb', I6: '/greyhawk-university/atlas/poi/i6-marrowstone-reach',
+  J8: '/greyhawk-university/atlas/poi/j8-ehlonnas-mount', D5: '/greyhawk-university/ritterstadt'
+};
+let calibrating = false, pendingMode = null;
+
+$('obsidianBtn').onclick = e => startExport('obsidian', e.altKey);
+$('publishBtn').onclick = e => startExport('publish', e.altKey);
+$('webBtn').onclick = e => startExport('web', e.altKey);
+$('hexNotesBtn').onclick = e => {
+  if (e.altKey || !state.settings.anchor) {
+    pendingMode = 'hexnotes'; calibrating = true;
+    alert('One-time calibration: click your anchor location hex on the map.\nLetter coordinates appear after this.');
+    return;
+  }
+  exportHexNotes();
+};
+function startExport(mode, recal) {
+  if (!img) { alert('Load your map image first.'); return; }
+  if (mode === 'hexnotes') { exportHexNotes(); return; }
+  pendingMode = mode;
+  if (!state.settings.anchor || recal) {
+    calibrating = true;
+    alert('One-time calibration: click your anchor location hex on the map.\nLetter coordinates appear after this.\n(Alt-click an export button any time to recalibrate.)');
+    return;
+  }
+  exportMapNote(mode);
+}
+
+function exportMapNote(mode) {
+  if (mode === 'web') {
+    const base = prompt('Your published wiki base URL (report links will point there):',
+      state.settings.wikiBase || 'https://publish.obsidian.md/YOUR-SITE');
+    if (base === null) return;
+    state.settings.wikiBase = base.replace(/\/+$/, ''); save();
+  }
+  const s = state.settings, a = s.anchor;
+  const dx = 4 - a.col, dy = 5 - a.row; // vault coord = tool coord + d
+  const uri = f => 'obsidian://open?vault=' + encodeURIComponent(OBSIDIAN_VAULT) + '&file=' + encodeURIComponent(f);
+  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const MAX = 1600, k = Math.min(1, MAX / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  // wrap the base64 in short lines: browsers strip newlines inside URLs, but
+  // Obsidian's editor chokes on multi-MB single lines
+  const data = c.toDataURL('image/jpeg', 0.75).replace(/(.{200})/g, '$1\n');
+  let out = '<svg id="wm-hexmap" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + img.width + ' ' + img.height + '" style="max-width:100%;height:auto">';
+  out += '<image href="' + data + '" x="0" y="0" width="' + img.width + '" height="' + img.height + '"/>';
+  for (let X = 1; X <= 10; X++) for (let Y = 1; Y <= 8; Y++) {
+    const col = X - dx, row = Y - dy;
+    const { x, y } = hexCenter(col, row);
+    let pts = '';
+    for (let i = 0; i < 6; i++) { const [px, py] = hexCorner(x, y, i); pts += px.toFixed(1) + ',' + py.toFixed(1) + ' '; }
+    const L = String.fromCharCode(64 + X) + Y;
+    let href = null, tip = L;
+    if (mode === 'obsidian') {
+      const poi = POI_NOTES[L] ? POI_DIR + POI_NOTES[L] : (L === 'D5' ? TOWN_NOTE : null);
+      href = uri(poi || (HEX_NOTE_DIR + X + '_' + Y));
+      tip = L + ' — ' + (poi ? poi.replace(/^.*\//, '').replace(/^[A-J]\d+ - /, '').replace(/^05\. /, '') : 'hex note ' + X + '_' + Y);
+    } else if (POI_PERMALINKS[L]) {
+      href = (mode === 'web' ? (state.settings.wikiBase || '') : '') + POI_PERMALINKS[L];
+      tip = L + ' — ' + (POI_NOTES[L] ? POI_NOTES[L].replace(/^[A-J]\d+ - /, '') : 'Ritterstadt');
+    }
+    let cell = '<polygon points="' + pts.trim() + '" fill="#ffffff" fill-opacity="0.01" stroke="' + s.gridColor + '" stroke-opacity="' + (s.gridAlpha / 100).toFixed(2) + '" stroke-width="' + (s.hexSize * 0.05).toFixed(1) + '"><title>' + esc(tip) + '</title></polygon>'
+        + '<text x="' + x.toFixed(1) + '" y="' + (y - s.hexSize * 0.45).toFixed(1) + '" font-size="' + (s.hexSize * 0.3).toFixed(1) + '" font-family="Georgia" fill="' + s.gridColor + '" fill-opacity="0.65" text-anchor="middle">' + L + '</text>';
+    out += href ? '<a href="' + esc(href) + '">' + cell + '</a>' : cell;
+  }
+  out += '</svg>';
+  let md = '';
+  if (mode === 'obsidian') {
+    md = '---\ntags: [university, geography, hex-map, west-marches, interactive]\ndescription: "West Marches map — click a hex to open its note (POI note where one exists, hex note otherwise)."\n---\n\n# West Marches — Hex Map\n\n*Use reading view. Click a hex to open its note; POI hexes open the POI report directly. Regenerate any time from hexcrawl.html → “Obsidian note”.*\n\n' + out + '\n';
+  } else {
+    md = '---\npublish: true\npermalink: /greyhawk-university/atlas/west-marches-map\ntags: [university, geography, hex-map, west-marches]\ndescription: "Survey map of the West Marches — the Ritterstadt frontier. Click a marked hex to open its location report."\n---\n\n# West Marches — Survey Map\n\n*Greyhawk University Field Survey Office. Each hex ≈ 6 miles. Click a hex with a report on file to open it — unmarked wilderness is exactly that: unreported.*\n\n' + out + '\n';
+  }
+  let blob, fname;
+  if (mode === 'web') {
+    const page = '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+      + '<title>West Marches — Survey Map</title>'
+      + '<style>body{margin:0;background:#14110d;height:100vh;display:flex;flex-direction:column;font-family:Georgia,serif}'
+      + '#wrap{flex:1;min-height:0}#wrap svg{width:100%!important;height:100%!important;max-width:none!important;display:block;cursor:grab}'
+      + 'footer{color:#e8e0cf;opacity:.55;font-size:12px;padding:6px 12px}</style></head><body>'
+      + '<div id="wrap">' + out + '</div>'
+      + '<footer>West Marches — Greyhawk University Field Survey Office. Drag to pan, scroll to zoom, click a marked hex for its report.</footer>'
+      + '<scr' + 'ipt>(function(){var svg=document.getElementById("wm-hexmap");var vb=svg.viewBox.baseVal,drag=null;'
+      + 'svg.addEventListener("wheel",function(e){e.preventDefault();var k=e.deltaY<0?0.85:1.18;'
+      + 'var pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;var p=pt.matrixTransform(svg.getScreenCTM().inverse());'
+      + 'vb.x=p.x-(p.x-vb.x)*k;vb.y=p.y-(p.y-vb.y)*k;vb.width*=k;vb.height*=k;},{passive:false});'
+      + 'svg.addEventListener("mousedown",function(e){drag=[e.clientX,e.clientY];svg.style.cursor="grabbing";});'
+      + 'window.addEventListener("mouseup",function(){drag=null;svg.style.cursor="grab";});'
+      + 'window.addEventListener("mousemove",function(e){if(!drag)return;var sc=vb.width/svg.clientWidth;'
+      + 'vb.x-=(e.clientX-drag[0])*sc;vb.y-=(e.clientY-drag[1])*sc;drag=[e.clientX,e.clientY];});'
+      + '})();</scr' + 'ipt></body></html>';
+    blob = new Blob([page], { type: 'text/html' }); fname = 'index.html';
+  } else {
+    blob = new Blob([md], { type: 'text/markdown' });
+    fname = mode === 'obsidian' ? 'West Marches Map (Obsidian).md' : 'West Marches Map (Publish).md';
+  }
+  const el = document.createElement('a');
+  el.href = URL.createObjectURL(blob);
+  el.download = fname;
+  el.click(); URL.revokeObjectURL(el.href);
+}
+
+// ---------- boot ----------
+window.addEventListener('resize', draw);
+window.addEventListener('beforeunload', () => { if (fsaDirty) flushAutosave(); });
+buildSwatches();
+syncUndoBtns();
+load().then(async () => {
+  buildPipeIndex();
+  renderList(); draw();
+  await restoreAutosaveHandle();
+  if (!state.pipeline) tryFetchPipeline();
+  else setStatus(fileHandle ? 'autosaving to ' + (fileHandle.name || 'file') : 'browser only — click Autosave', fileHandle ? 'live' : 'warn');
+});
+</script>
+<!-- ============================================================
+     LEGEND / HELP PANEL
+     Paste immediately before the FINAL closing body tag — the one right
+     after the last closing script tag, not the one inside the Web map
+     export template.
+     Self-contained: no edits to existing markup, no JavaScript.
+     Inherits the app's CSS variables (--panel, --ink, --accent…).
+     ============================================================ -->
+<style>
+  #legend {
+    position: fixed; right: 14px; bottom: 14px; z-index: 40;
+    font-family: Georgia, 'Times New Roman', serif; font-size: 13px;
+    color: var(--ink); max-width: min(360px, calc(100vw - 28px));
+  }
+  #legend > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+    width: fit-content; float: right;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 10px; color: var(--ink);
+  }
+  #legend > summary::-webkit-details-marker { display: none; }
+  #legend > summary:hover { border-color: var(--accent); }
+  #legend > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #legend[open] > summary { background: var(--accent); color: #1b1813; border-color: var(--accent); }
+  #legend .sheet {
+    clear: both; margin-top: 8px; padding: 14px 16px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.55);
+    max-height: min(70vh, 520px); overflow-y: auto;
+  }
+  #legend h2 {
+    font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--accent); font-weight: normal; margin: 0 0 6px;
+  }
+  #legend h2 + * { margin-top: 0; }
+  #legend section + section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  #legend dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+  #legend dt { color: var(--dim); white-space: nowrap; }
+  #legend dd { margin: 0; }
+  #legend kbd {
+    font-family: Georgia, serif; font-size: 12px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 5px;
+  }
+  #legend .swatches { display: flex; gap: 6px; margin: 0; }
+  #legend .swatches i {
+    width: 20px; height: 20px; border-radius: 3px;
+    border: 1px solid var(--border); display: block;
+  }
+  #legend p { margin: 8px 0 0; color: var(--dim); line-height: 1.45; }
+  #legend a { color: var(--accent); }
+  @media (max-width: 640px) { #legend { right: 8px; bottom: 8px; } }
+</style>
+
+<details id="legend">
+  <summary title="Show or hide the legend">Legend</summary>
+  <div class="sheet">
+
+    <section>
+      <h2>Getting around</h2>
+      <dl>
+        <dt>Pan</dt><dd>Drag the map</dd>
+        <dt>Zoom</dt><dd>Scroll wheel</dd>
+        <dt>Open a hex</dt><dd>Click it</dd>
+      </dl>
+      <p>The badge in the corner shows the hex under your cursor as <em>column,row</em>.</p>
+    </section>
+
+    <section>
+      <h2>Writing notes</h2>
+      <dl>
+        <dt><kbd>Ctrl</kbd>+<kbd>Enter</kbd></dt><dd>Save the note</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Close without saving</dd>
+        <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd></dt><dd>Undo</dd>
+        <dt><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></dt><dd>Redo</dd>
+      </dl>
+      <p>Search filters the note list as you type.</p>
+    </section>
+
+    <section>
+      <h2>Markers</h2>
+      <div class="swatches" aria-label="Marker colours">
+        <i style="background:#d4a24e"></i><i style="background:#7fb069"></i>
+        <i style="background:#6a9fd4"></i><i style="background:#d47b6a"></i>
+        <i style="background:#b58ad4"></i><i style="background:#e0e0e0"></i>
+      </div>
+      <p>Colours mean whatever this map says they mean. Pick a scheme and record it in a note so it outlives your memory of it.</p>
+    </section>
+
+    <section>
+      <h2>Where your work lives</h2>
+      <p>In this browser, on this machine, at this address — nowhere else. Clearing site data erases it. Switch on <strong>Autosave&hellip;</strong> to keep a live copy in a real file, and use <strong>Export</strong> for a snapshot you can move somewhere safe.</p>
+    </section>
+
+  </div>
+</details>
+<!-- ===================== END LEGEND ===================== -->
+
+<!-- ============================================================
+     CALIBRATION WATCH
+     Paste immediately before the FINAL closing body tag — the one
+     right after the last closing script tag, not the one inside the
+     Web map export template.
+
+     Records the grid settings in force when the anchor was set, then
+     flags any later change that would silently invalidate the letter
+     coordinates. Reads existing state; writes only settings.calibBase.
+     ============================================================ -->
+<style>
+  #calwatch {
+    position: fixed; left: 14px; bottom: 14px; z-index: 40;
+    font-family: Georgia, 'Times New Roman', serif; font-size: 13px;
+    color: var(--ink); max-width: min(340px, calc(100vw - 28px));
+  }
+  #calwatch > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 7px;
+    width: fit-content; padding: 4px 10px; border-radius: 4px;
+    background: var(--panel2); border: 1px solid var(--border); color: var(--ink);
+  }
+  #calwatch > summary::-webkit-details-marker { display: none; }
+  #calwatch > summary:hover { border-color: var(--accent); }
+  #calwatch > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #calwatch .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+  #calwatch.ok    .dot { background: var(--accent2); }
+  #calwatch.stale .dot { background: #d47b6a; }
+  #calwatch.none  .dot { background: var(--dim); }
+  #calwatch .sheet {
+    margin-top: 8px; padding: 13px 15px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.55);
+    max-height: min(70vh, 460px); overflow-y: auto;
+  }
+  #calwatch h2 {
+    font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--accent); font-weight: normal; margin: 0 0 8px;
+  }
+  #calwatch table { border-collapse: collapse; width: 100%; }
+  #calwatch th {
+    text-align: left; font-weight: normal; color: var(--dim);
+    padding: 2px 10px 2px 0; white-space: nowrap;
+  }
+  #calwatch td { padding: 2px 0; text-align: right; font-variant-numeric: tabular-nums; }
+  #calwatch tr.changed th, #calwatch tr.changed td { color: #d4886a; }
+  #calwatch tr.changed td::after { content: ' \25C0'; font-size: 9px; vertical-align: 2px; }
+  #calwatch .msg { margin: 10px 0 0; line-height: 1.45; color: var(--dim); }
+  #calwatch .msg.warn { color: #d4886a; }
+  #calwatch .row { display: flex; gap: 6px; margin-top: 11px; }
+  #calwatch button { font-size: 12px; padding: 3px 9px; }
+  #calwatch .foot { margin: 9px 0 0; font-size: 11px; color: var(--dim); line-height: 1.4; }
+  @media (max-width: 640px) { #calwatch { left: 8px; bottom: 8px; } }
+</style>
+
+<details id="calwatch" class="none">
+  <summary title="Is the calibration still trustworthy?"><span class="dot"></span>Calibration</summary>
+  <div class="sheet">
+    <h2>Grid settings</h2>
+    <table id="cw-table"></table>
+    <p class="msg" id="cw-msg"></p>
+    <div class="row">
+      <button type="button" id="cw-rebase">Accept as calibrated</button>
+      <button type="button" id="cw-copy">Copy report</button>
+    </div>
+    <p class="foot">Grid colour, opacity, coordinate labels and terrain tint do not affect calibration and are not tracked.</p>
+  </div>
+</details>
+
+<script>
+(function () {
+  // Watched keys: changing any of these moves hexes in tool space, which is
+  // what the anchor is recorded in. Everything else is cosmetic.
+  var KEYS = [
+    ['hexSize', 'Hex size'],
+    ['offX',    'Shift X'],
+    ['offY',    'Shift Y'],
+    ['orient',  'Orientation']
+  ];
+
+  var el   = document.getElementById('calwatch');
+  var tbl  = document.getElementById('cw-table');
+  var msg  = document.getElementById('cw-msg');
+  var last = '';
+  var loggedStale = false;
+
+  function st()  { return (typeof state !== 'undefined' && state) ? state : null; }
+  function cfg() { var s = st(); return (s && s.settings) ? s.settings : null; }
+
+  function snapshot() {
+    var s = cfg(); if (!s) return null;
+    var o = {};
+    KEYS.forEach(function (k) { o[k[0]] = s[k[0]]; });
+    o.mapName = (st() || {}).mapName || null;
+    return o;
+  }
+
+  function render() {
+    var s = cfg(); if (!s) return;
+    var now  = snapshot();
+    var base = s.calibBase || null;
+    var anch = s.anchor || null;
+
+    var rows = [], drift = [];
+
+    if (anch) {
+      rows.push('<tr><th>Anchor hex</th><td>' + anch.col + ',' + anch.row + '</td></tr>');
+    }
+
+    KEYS.forEach(function (k) {
+      var cur = now[k[0]];
+      var changed = base && String(base[k[0]]) !== String(cur);
+      if (changed) drift.push(k[1] + ': ' + base[k[0]] + ' \u2192 ' + cur);
+      rows.push('<tr class="' + (changed ? 'changed' : '') + '"><th>' + k[1] +
+                '</th><td>' + cur + '</td></tr>');
+    });
+
+    var mapChanged = base && String(base.mapName) !== String(now.mapName);
+    if (mapChanged) drift.push('Map image: ' + base.mapName + ' \u2192 ' + now.mapName);
+    rows.push('<tr class="' + (mapChanged ? 'changed' : '') + '"><th>Map image</th><td>' +
+              (now.mapName || '\u2014') + '</td></tr>');
+
+    var p = st() && st().pipeline;
+    if (p && p.cols && p.rows) {
+      rows.push('<tr><th>Pipeline grid</th><td>' + p.cols + ' \u00d7 ' + p.rows + '</td></tr>');
+    }
+
+    tbl.innerHTML = rows.join('');
+
+    if (!anch) {
+      el.className = 'none';
+      msg.className = 'msg';
+      msg.textContent = 'Not calibrated. Alt-click an export button, then click your anchor location hex. Until then hexes stay as NN.NN.';
+      loggedStale = false;
+    } else if (!base) {
+      el.className = 'ok';
+      msg.className = 'msg';
+      msg.textContent = 'Anchor set, but these settings were never recorded as its baseline. If the grid is aligned correctly right now, press Accept as calibrated.';
+      loggedStale = false;
+    } else if (drift.length) {
+      el.className = 'stale';
+      msg.className = 'msg warn';
+      msg.textContent = 'Calibration is stale. ' + drift.length +
+        (drift.length === 1 ? ' setting has' : ' settings have') +
+        ' changed since the anchor was set, so letter coordinates are wrong. Recalibrate, or restore the old values.';
+      if (!loggedStale) {
+        console.warn('[calibration] stale \u2014 ' + drift.join(' | '));
+        loggedStale = true;
+      }
+    } else {
+      el.className = 'ok';
+      msg.className = 'msg';
+      msg.textContent = 'Calibration valid. Grid settings match those in force when the anchor was set.';
+      loggedStale = false;
+    }
+  }
+
+  function rebase() {
+    var s = cfg(); if (!s || !s.anchor) return;
+    s.calibBase = snapshot();
+    if (typeof save === 'function') { try { save(); } catch (e) {} }
+    console.log('[calibration] baseline recorded', s.calibBase);
+    render();
+  }
+
+  document.getElementById('cw-rebase').onclick = rebase;
+
+  document.getElementById('cw-copy').onclick = function () {
+    var s = cfg(); if (!s) return;
+    var txt = 'Calibration report \u2014 ' + new Date().toISOString() + '\n' +
+              'anchor: ' + (s.anchor ? s.anchor.col + ',' + s.anchor.row : 'none') + '\n' +
+              'current:  ' + JSON.stringify(snapshot()) + '\n' +
+              'baseline: ' + JSON.stringify(s.calibBase || null);
+    if (navigator.clipboard) navigator.clipboard.writeText(txt);
+    console.log(txt);
+    this.textContent = 'Copied';
+    setTimeout(function () { this.textContent = 'Copy report'; }.bind(this), 1400);
+  };
+
+  // Auto-record the baseline the first time an anchor appears, so calibrating
+  // normally needs no extra step.
+  setInterval(function () {
+    var s = cfg(); if (!s) return;
+    if (s.anchor && !s.calibBase) { rebase(); return; }
+    var sig = JSON.stringify([snapshot(), s.anchor || null, s.calibBase || null]);
+    if (sig !== last) { last = sig; render(); }
+  }, 400);
+
+  render();
+})();
+</script>
+<!-- ================= END CALIBRATION WATCH ================= -->
+
+<!-- ============================================================
+     PLAYER SHARING
+     Paste immediately before the FINAL closing body tag.
+
+     Adds:  a "Share with players" checkbox in the note editor
+            a "Player map" export  (standalone HTML, shared notes only)
+            an "Inbox" for approving or denying notes players send back
+
+     Touches no existing markup and rewrites no existing function body;
+     openEditor is wrapped, everything else is additive.
+     ============================================================ -->
+<style>
+  #shareWrap { display:flex; gap:7px; align-items:center; color:var(--dim); font-size:13px; margin:2px 0 4px; }
+  #inboxDlg {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px; width: 620px; max-width: 92vw;
+    font-family: Georgia,'Times New Roman',serif;
+  }
+  #inboxDlg::backdrop { background: rgba(0,0,0,.6); }
+  #inboxDlg h2 { font-size:12px; letter-spacing:1.4px; text-transform:uppercase; color:var(--accent); font-weight:normal; margin-bottom:9px; }
+  #inboxDlg textarea { width:100%; min-height:110px; background:var(--panel2); color:var(--ink);
+    border:1px solid var(--border); border-radius:4px; padding:7px; font-family:inherit; font-size:11px; word-break:break-all; }
+  #pending { max-height:44vh; overflow-y:auto; margin-top:11px; display:flex; flex-direction:column; gap:8px; }
+  .pend { background:var(--panel2); border:1px solid var(--border); border-left:3px solid var(--accent2);
+          border-radius:4px; padding:9px 11px; }
+  .pend .h { color:var(--accent); margin-bottom:3px; }
+  .pend .who { color:var(--dim); font-size:11px; }
+  .pend .b { white-space:pre-wrap; line-height:1.4; margin:5px 0 7px; }
+  .pend .row { display:flex; gap:6px; }
+  #inboxDlg .foot { display:flex; gap:6px; margin-top:12px; }
+  #inboxDlg .muted { color:var(--dim); font-size:12px; line-height:1.45; }
+</style>
+
+<dialog id="inboxDlg">
+  <h2>Notes from players</h2>
+  <p class="muted">Paste what a player sent you. Approving adds the note to your map and marks it shared, so it appears the next time you export the player map. Denying discards it here — their own copy is untouched.</p>
+  <textarea id="inboxPaste" placeholder="HEXNOTES1:..."></textarea>
+  <div class="foot">
+    <button type="button" id="inboxRead">Read</button>
+    <button type="button" id="inboxClose">Close</button>
+  </div>
+  <div id="pending"></div>
+</dialog>
+
+<script>
+(function () {
+  var PLAYER_TPL = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>__TITLE__<\/title>\n<style>\n  :root {\n    --bg:#1e1b16; --panel:#2a251d; --panel2:#332d23; --ink:#e8e0cf;\n    --dim:#9a8f78; --accent:#d4a24e; --accent2:#7fb069; --border:#4a4234;\n  }\n  *{box-sizing:border-box;margin:0}\n  body{font-family:Georgia,'Times New Roman',serif;background:var(--bg);color:var(--ink);\n       height:100vh;display:flex;flex-direction:column;overflow:hidden}\n  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:8px 12px;\n         background:var(--panel);border-bottom:2px solid var(--border);font-size:13px}\n  h1{font-size:16px;color:var(--accent);letter-spacing:1px;margin-right:6px}\n  button{background:var(--panel2);color:var(--ink);border:1px solid var(--border);\n         padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:13px}\n  button:hover{border-color:var(--accent)}\n  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}\n  main{flex:1;min-height:0;display:flex}\n  #wrap{flex:1;min-height:0;position:relative}\n  svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none}\n  svg.drag{cursor:grabbing}\n  aside{width:320px;background:var(--panel);border-left:2px solid var(--border);\n        padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}\n  aside h2{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);font-weight:normal}\n  .dmnote{background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--accent);\n          border-radius:4px;padding:9px 11px;white-space:pre-wrap;line-height:1.45}\n  .dmnote b{display:block;margin-bottom:4px}\n  input,textarea{width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--border);\n                 border-radius:4px;padding:6px 8px;font-family:inherit;font-size:13px}\n  textarea{min-height:130px;resize:vertical}\n  label.chk{display:flex;gap:7px;align-items:center;color:var(--dim);cursor:pointer}\n  .row{display:flex;gap:6px}\n  .muted{color:var(--dim);font-size:12px;line-height:1.45}\n  #badge{position:absolute;top:8px;left:10px;background:rgba(30,27,22,.8);color:var(--accent);\n         padding:3px 10px;border-radius:4px;font-size:13px;pointer-events:none}\n  dialog{background:var(--panel);color:var(--ink);border:1px solid var(--border);border-radius:6px;\n         padding:16px;max-width:560px;width:92vw;font-family:inherit}\n  dialog::backdrop{background:rgba(0,0,0,.6)}\n  dialog textarea{min-height:180px;font-size:11px;word-break:break-all}\n  .empty{color:var(--dim);font-style:italic}\n<\/style>\n<\/head>\n<body>\n<header>\n  <h1>__TITLE__<\/h1>\n  <button id=\"send\">Send notes to the DM<\/button>\n  <span class=\"muted\" id=\"count\"><\/span>\n<\/header>\n<main>\n  <div id=\"wrap\">\n    <svg id=\"map\" xmlns=\"http://www.w3.org/2000/svg\"><\/svg>\n    <div id=\"badge\" style=\"display:none\"><\/div>\n  <\/div>\n  <aside>\n    <h2 id=\"hexLabel\">No hex selected<\/h2>\n    <div id=\"dmSlot\"><\/div>\n    <h2>Your note<\/h2>\n    <input id=\"pTitle\" placeholder=\"Title\" disabled>\n    <textarea id=\"pBody\" placeholder=\"Only you can see this until you send it to the DM.\" disabled><\/textarea>\n    <label class=\"chk\"><input type=\"checkbox\" id=\"pShare\" disabled> Offer this note to the DM<\/label>\n    <div class=\"row\">\n      <button id=\"pSave\" disabled>Save<\/button>\n      <button id=\"pDel\" disabled>Delete<\/button>\n    <\/div>\n    <p class=\"muted\">Your notes stay in this browser. Nothing leaves until you press <em>Send notes to the DM<\/em>, and the DM decides what becomes part of everyone's map.<\/p>\n  <\/aside>\n<\/main>\n\n<dialog id=\"dlg\">\n  <h2 style=\"color:var(--accent);font-size:13px;letter-spacing:1px;margin-bottom:8px\">SEND TO THE DM<\/h2>\n  <p class=\"muted\" style=\"margin-bottom:8px\">Copy this and send it however you normally talk to your DM.<\/p>\n  <textarea id=\"payload\" readonly><\/textarea>\n  <div class=\"row\" style=\"margin-top:10px\">\n    <button id=\"copy\">Copy<\/button>\n    <button id=\"dl\">Download file<\/button>\n    <button id=\"close\">Close<\/button>\n  <\/div>\n<\/dialog>\n\n<script>\nconst DATA = __HEXDATA__;\nconst KEY = 'hexcrawl-player-' + DATA.id;\nconst $ = i => document.getElementById(i);\n\nlet mine = {};\ntry { mine = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { mine = {}; }\nconst persist = () => { try { localStorage.setItem(KEY, JSON.stringify(mine)); } catch (e) {} };\n\nconst svg = $('map');\nconst NS = 'http://www.w3.org/2000/svg';\nlet vb = { x: 0, y: 0, w: DATA.w, h: DATA.h };\nconst applyVB = () => svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);\n\nfunction el(n, a) { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; }\n\nlet selected = null;\n\nfunction build() {\n  svg.textContent = '';\n  svg.appendChild(el('image', { href: DATA.image, x: 0, y: 0, width: DATA.w, height: DATA.h }));\n  const gGrid = el('g', {}), gMark = el('g', {});\n  DATA.cells.forEach(c => {\n    const p = el('polygon', {\n      points: c.pts, fill: '#ffffff', 'fill-opacity': 0.01,\n      stroke: DATA.gridColor, 'stroke-opacity': DATA.gridAlpha, 'stroke-width': DATA.stroke\n    });\n    p.style.cursor = 'pointer';\n    p.addEventListener('click', ev => { ev.stopPropagation(); select(c.L); });\n    p.addEventListener('mouseenter', () => {\n      const b = $('badge'); b.style.display = 'block';\n      const d = c.dm ? '  \\u2014  ' + c.dm.title : (mine[c.L] ? '  \\u2014  ' + (mine[c.L].title || 'your note') : '');\n      b.textContent = c.L + d;\n    });\n    p.addEventListener('mouseleave', () => { $('badge').style.display = 'none'; });\n    const t = el('title'); t.textContent = c.L + (c.dm ? ' \\u2014 ' + c.dm.title : '');\n    p.appendChild(t);\n    gGrid.appendChild(p);\n\n    gGrid.appendChild(Object.assign(el('text', {\n      x: c.cx, y: c.cy - DATA.r * 0.45, 'font-size': DATA.r * 0.3, 'font-family': 'Georgia',\n      fill: DATA.gridColor, 'fill-opacity': 0.6, 'text-anchor': 'middle', 'pointer-events': 'none'\n    }), { textContent: c.L }));\n\n    if (c.dm) {\n      if (c.dm.icon) {\n        gMark.appendChild(el('image', {\n          href: c.dm.icon, x: c.cx - DATA.r * 0.4, y: c.cy - DATA.r * 0.4,\n          width: DATA.r * 0.8, height: DATA.r * 0.8, 'pointer-events': 'none'\n        }));\n      } else {\n        gMark.appendChild(el('circle', {\n          cx: c.cx, cy: c.cy, r: DATA.r * 0.26, fill: c.dm.color || '#d4a24e',\n          stroke: '#1b1813', 'stroke-width': DATA.stroke, 'pointer-events': 'none'\n        }));\n      }\n    }\n    if (mine[c.L]) {\n      gMark.appendChild(el('circle', {\n        cx: c.cx, cy: c.cy + (c.dm ? DATA.r * 0.42 : 0), r: DATA.r * 0.17,\n        fill: 'none', stroke: '#7fb069', 'stroke-width': DATA.stroke * 1.4,\n        'stroke-dasharray': (DATA.r * 0.11).toFixed(1), 'pointer-events': 'none'\n      }));\n    }\n  });\n  svg.appendChild(gGrid); svg.appendChild(gMark);\n  applyVB();\n  countMine();\n}\n\nfunction countMine() {\n  const n = Object.keys(mine).length;\n  const s = Object.values(mine).filter(x => x.share).length;\n  $('count').textContent = n ? n + (n === 1 ? ' note' : ' notes') + (s ? ', ' + s + ' offered' : '') : '';\n}\n\nfunction select(L) {\n  selected = L;\n  const c = DATA.cells.find(x => x.L === L);\n  $('hexLabel').textContent = 'Hex ' + L;\n  $('dmSlot').innerHTML = '';\n  if (c && c.dm) {\n    const d = document.createElement('div');\n    d.className = 'dmnote';\n    const b = document.createElement('b'); b.textContent = c.dm.title || '(untitled)';\n    d.appendChild(b); d.appendChild(document.createTextNode(c.dm.body || ''));\n    $('dmSlot').appendChild(d);\n  } else {\n    const p = document.createElement('p');\n    p.className = 'muted empty'; p.textContent = 'Nothing from the DM here.';\n    $('dmSlot').appendChild(p);\n  }\n  const m = mine[L] || { title: '', body: '', share: false };\n  ['pTitle', 'pBody', 'pShare', 'pSave', 'pDel'].forEach(i => { $(i).disabled = false; });\n  $('pTitle').value = m.title; $('pBody').value = m.body; $('pShare').checked = !!m.share;\n}\n\n$('pSave').onclick = () => {\n  if (!selected) return;\n  const t = $('pTitle').value.trim(), b = $('pBody').value.trim();\n  if (!t && !b) delete mine[selected];\n  else mine[selected] = { title: t, body: b, share: $('pShare').checked };\n  persist(); build();\n};\n$('pDel').onclick = () => { if (selected) { delete mine[selected]; persist(); build(); $('pTitle').value = ''; $('pBody').value = ''; $('pShare').checked = false; } };\n\n$('send').onclick = () => {\n  const out = [];\n  Object.keys(mine).forEach(L => { if (mine[L].share) out.push({ L: L, title: mine[L].title, body: mine[L].body }); });\n  if (!out.length) { alert('No notes are offered yet. Tick \"Offer this note to the DM\" on the ones you want to send.'); return; }\n  const who = prompt('Your name (so the DM knows who sent these):', localStorage.getItem(KEY + '-who') || '');\n  if (who === null) return;\n  localStorage.setItem(KEY + '-who', who);\n  const pack = { v: 1, map: DATA.id, from: who || 'a player', notes: out };\n  $('payload').value = 'HEXNOTES1:' + btoa(unescape(encodeURIComponent(JSON.stringify(pack))));\n  $('dlg').showModal();\n};\n$('copy').onclick = function () {\n  $('payload').select();\n  if (navigator.clipboard) navigator.clipboard.writeText($('payload').value);\n  this.textContent = 'Copied';\n  setTimeout(() => { this.textContent = 'Copy'; }, 1400);\n};\n$('dl').onclick = () => {\n  const a = document.createElement('a');\n  a.href = URL.createObjectURL(new Blob([$('payload').value], { type: 'text/plain' }));\n  a.download = 'hex-notes-for-dm.txt'; a.click(); URL.revokeObjectURL(a.href);\n};\n$('close').onclick = () => $('dlg').close();\n\n// pan / zoom\nlet drag = null;\nsvg.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; svg.classList.add('drag'); svg.setPointerCapture(e.pointerId); });\nsvg.addEventListener('pointerup', e => { drag = null; svg.classList.remove('drag'); });\nsvg.addEventListener('pointermove', e => {\n  if (!drag) return;\n  const sc = vb.w / svg.clientWidth;\n  vb.x -= (e.clientX - drag[0]) * sc; vb.y -= (e.clientY - drag[1]) * sc;\n  drag = [e.clientX, e.clientY]; applyVB();\n});\nsvg.addEventListener('wheel', e => {\n  e.preventDefault();\n  const r = svg.getBoundingClientRect();\n  const mx = (e.clientX - r.left) / r.width, my = (e.clientY - r.top) / r.height;\n  const k = e.deltaY < 0 ? 1 / 1.12 : 1.12;\n  const nw = Math.min(Math.max(vb.w * k, DATA.w / 40), DATA.w * 3);\n  const nh = nw * (vb.h / vb.w);\n  vb.x += (vb.w - nw) * mx; vb.y += (vb.h - nh) * my;\n  vb.w = nw; vb.h = nh; applyVB();\n}, { passive: false });\n\nbuild();\n<\/script>\n<\/body>\n<\/html>\n";
+  var $$ = function (i) { return document.getElementById(i); };
+
+  // ---------- 1. share flag in the editor ----------
+  var wrap = document.createElement('label');
+  wrap.id = 'shareWrap';
+  var cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.id = 'noteShare';
+  wrap.appendChild(cb);
+  wrap.appendChild(document.createTextNode(' Share with players'));
+  var btns = document.querySelector('#editor .editorBtns');
+  if (btns && btns.parentNode) btns.parentNode.insertBefore(wrap, btns);
+
+  var _open = openEditor;
+  openEditor = function (key) {
+    _open(key);
+    var n = state.notes[key];
+    cb.checked = !!(n && n.share);
+  };
+
+  // runs after the app's own onclick handler
+  $$('saveNote').addEventListener('click', function () {
+    if (!selected) return;
+    var n = state.notes[selected];
+    if (!n) return;                       // note was deleted for being empty
+    if (cb.checked) n.share = true; else delete n.share;
+    save(); renderList(); draw();
+  });
+
+  // ---------- 2. buttons ----------
+  function mkBtn(label, title, fn) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = label; b.title = title; b.onclick = fn;
+    return b;
+  }
+  var host = $$('exportBtn') && $$('exportBtn').parentNode;
+  if (host) {
+    host.appendChild(mkBtn('Player map', 'Standalone HTML map with only the notes you marked Share with players', exportPlayerMap));
+    host.appendChild(mkBtn('Inbox', 'Approve or deny notes players have sent you', function () { $$('inboxDlg').showModal(); }));
+  }
+
+  // ---------- 3. player map export ----------
+  function mapId() {
+    var a = state.settings.anchor || { col: 0, row: 0 };
+    return ((state.mapName || 'map') + '-' + a.col + '-' + a.row).replace(/[^A-Za-z0-9_-]/g, '');
+  }
+
+  function exportPlayerMap() {
+    if (!img) { alert('Load a map image first.'); return; }
+    var a = state.settings.anchor;
+    if (!a) { alert('Calibrate first: alt-click an export button, then click your anchor location hex.'); return; }
+
+    var shared = Object.keys(state.notes).filter(function (k) { return state.notes[k].share; });
+    if (!shared.length && !confirm('No notes are marked "Share with players". Export an empty map anyway?')) return;
+
+    var s = state.settings, dx = 4 - a.col, dy = 5 - a.row;
+    var p = state.pipeline || {};
+    var COLS = p.cols || 10, ROWS = p.rows || 8;
+
+    // downscale the raster for file size; geometry stays in original image space
+    var MAX = 1600, k = Math.min(1, MAX / Math.max(img.width, img.height));
+    var c = document.createElement('canvas');
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+
+    var cells = [];
+    for (var X = 1; X <= COLS; X++) for (var Y = 1; Y <= ROWS; Y++) {
+      var col = X - dx, row = Y - dy;
+      var ctr = hexCenter(col, row), pts = '';
+      for (var i = 0; i < 6; i++) {
+        var pc = hexCorner(ctr.x, ctr.y, i);
+        pts += pc[0].toFixed(1) + ',' + pc[1].toFixed(1) + ' ';
+      }
+      var cell = {
+        L: String.fromCharCode(64 + X) + Y,
+        pts: pts.trim(),
+        cx: +ctr.x.toFixed(1), cy: +ctr.y.toFixed(1)
+      };
+      var n = state.notes[col + ',' + row];
+      if (n && n.share) {
+        cell.dm = { title: n.title || '', body: n.body || '', color: n.color || '#d4a24e' };
+        if (n.icon && state.icons && state.icons[n.icon]) cell.dm.icon = state.icons[n.icon].dataURL;
+      }
+      cells.push(cell);
+    }
+
+    var title = prompt('Title for the player map:', (state.mapName || 'West Marches') + ' — Player Map');
+    if (title === null) return;
+
+    var data = {
+      id: mapId(),
+      w: img.width, h: img.height,
+      image: c.toDataURL('image/jpeg', 0.82),
+      r: s.hexSize,
+      stroke: +(s.hexSize * 0.05).toFixed(1),
+      gridColor: s.gridColor,
+      gridAlpha: +(s.gridAlpha / 100).toFixed(2),
+      cells: cells
+    };
+
+    var html = PLAYER_TPL
+      .split('__HEXDATA__').join(JSON.stringify(data))
+      .split('__TITLE__').join(title.replace(/[<>&]/g, ''));
+
+    var a2 = document.createElement('a');
+    a2.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    a2.download = 'player-map.html';
+    a2.click(); URL.revokeObjectURL(a2.href);
+    setStatus('player map: ' + shared.length + ' shared note(s)', 'live');
+  }
+
+  // ---------- 4. inbox ----------
+  var queue = [];
+
+  $$('inboxClose').onclick = function () { $$('inboxDlg').close(); };
+
+  $$('inboxRead').onclick = function () {
+    var raw = $$('inboxPaste').value.trim();
+    var m = raw.match(/HEXNOTES1:([A-Za-z0-9+/=]+)/);
+    if (!m) { alert('That does not look like a player submission. It should start with HEXNOTES1:'); return; }
+    var pack;
+    try { pack = JSON.parse(decodeURIComponent(escape(atob(m[1])))); }
+    catch (e) { alert('Could not read that submission.'); return; }
+    if (!pack || !pack.notes || !pack.notes.length) { alert('That submission contains no notes.'); return; }
+    if (pack.map && pack.map !== mapId()) {
+      if (!confirm('That was made against a different map or calibration. Coordinates may not line up. Continue?')) return;
+    }
+    pack.notes.forEach(function (n) { queue.push({ L: n.L, title: n.title, body: n.body, from: pack.from || 'a player' }); });
+    $$('inboxPaste').value = '';
+    renderPending();
+  };
+
+  function toolKey(L) {
+    var a = state.settings.anchor; if (!a) return null;
+    var X = L.charCodeAt(0) - 64, Y = parseInt(L.slice(1), 10);
+    if (!X || !Y) return null;
+    return (X - (4 - a.col)) + ',' + (Y - (5 - a.row));
+  }
+
+  function renderPending() {
+    var host = $$('pending'); host.innerHTML = '';
+    if (!queue.length) return;
+    queue.forEach(function (q, idx) {
+      var d = document.createElement('div'); d.className = 'pend';
+      var h = document.createElement('div'); h.className = 'h';
+      h.textContent = q.L + ' — ' + (q.title || '(untitled)');
+      var w = document.createElement('div'); w.className = 'who'; w.textContent = 'from ' + q.from;
+      var b = document.createElement('div'); b.className = 'b'; b.textContent = q.body || '';
+      var row = document.createElement('div'); row.className = 'row';
+      var ok = document.createElement('button'); ok.type = 'button'; ok.textContent = 'Approve';
+      var no = document.createElement('button'); no.type = 'button'; no.textContent = 'Deny';
+      ok.onclick = function () { approve(idx); };
+      no.onclick = function () { queue.splice(idx, 1); renderPending(); };
+      row.appendChild(ok); row.appendChild(no);
+      d.appendChild(h); d.appendChild(w); d.appendChild(b); d.appendChild(row);
+      host.appendChild(d);
+    });
+  }
+
+  function approve(idx) {
+    var q = queue[idx], key = toolKey(q.L);
+    if (!key) { alert('Calibrate first so hex letters can be resolved.'); return; }
+    pushUndo();
+    var credit = '\n\n— ' + q.from;
+    var existing = state.notes[key];
+    if (existing) {
+      existing.body = (existing.body || '') + '\n\n' + (q.title ? q.title + '\n' : '') + (q.body || '') + credit;
+      existing.share = true;
+    } else {
+      state.notes[key] = {
+        title: q.title || ('Note from ' + q.from),
+        body: (q.body || '') + credit,
+        color: '#7fb069',
+        share: true
+      };
+    }
+    queue.splice(idx, 1);
+    save(); renderList(); draw(); renderPending();
+    setStatus('approved ' + q.L, 'live');
+  }
+})();
+</script>
+<!-- ================= END PLAYER SHARING ================= -->
+
+<!-- ============================================================
+     MEASURE — distance and travel time
+     Paste immediately before the FINAL closing body tag.
+
+     Click two hexes; get straight-line distance, a least-cost route
+     that respects terrain, and travel time at a chosen pace.
+     Wraps draw() to paint the route. Adds no state the app can't ignore.
+     ============================================================ -->
+<style>
+  #measure {
+    position: fixed; right: 14px; top: 62px; z-index: 41;
+    font-family: Georgia,'Times New Roman',serif; font-size: 13px;
+    color: var(--ink); width: min(300px, calc(100vw - 28px)); display: none;
+  }
+  #measure.on { display: block; }
+  #measure .sheet {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 5px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.55); padding: 13px 15px;
+    max-height: min(76vh, 560px); overflow-y: auto;
+  }
+  #measure h2 {
+    font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--accent); font-weight: normal; margin: 0 0 8px;
+  }
+  #measure .big { font-size: 21px; color: var(--accent); margin: 2px 0 1px; }
+  #measure table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+  #measure th { text-align: left; font-weight: normal; color: var(--dim); padding: 2px 8px 2px 0; white-space: nowrap; }
+  #measure td { text-align: right; padding: 2px 0; font-variant-numeric: tabular-nums; }
+  #measure input, #measure select {
+    background: var(--panel2); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 5px; font-family: inherit; font-size: 12px; width: 68px;
+  }
+  #measure select { width: 100%; }
+  #measure .field { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; color: var(--dim); }
+  #measure section + section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  #measure .hint { color: var(--dim); line-height: 1.45; margin-top: 8px; }
+  #measure .warn { color: #d4886a; }
+  #mTerr { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center; margin-top: 6px; }
+  #mTerr span { color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+  #mTerr input { width: 56px; }
+  #measure .row { display: flex; gap: 6px; margin-top: 10px; }
+  #measure .legs { margin-top: 8px; max-height: 190px; overflow-y: auto; }
+  #measure .legs table { font-size: 12px; }
+  #measure .legs th { color: var(--dim); font-weight: normal; }
+  #measure .legs tr.blocked th, #measure .legs tr.blocked td { color: #d4886a; }
+  #measure .legs td.n { color: var(--dim); text-align: left; width: 1.6em; }
+</style>
+
+<div id="measure">
+  <div class="sheet">
+    <h2>Distance &amp; travel</h2>
+    <div id="mOut"><p class="hint">Click your starting hex, then each stop along the way.</p></div>
+
+    <section>
+      <div class="field"><label for="mMiles">Miles per hex</label><input type="number" id="mMiles" min="0.1" step="0.5" value="6"></div>
+      <div class="field"><label for="mPace">Pace</label></div>
+      <select id="mPace">
+        <option value="18">Slow — 18 miles/day</option>
+        <option value="24" selected>Normal — 24 miles/day</option>
+        <option value="30">Fast — 30 miles/day</option>
+      </select>
+    </section>
+
+    <section>
+      <h2>Terrain cost</h2>
+      <div id="mTerr"></div>
+      <p class="hint">Multipliers against open ground. 0 marks a hex impassable.</p>
+    </section>
+
+    <div class="row">
+      <button type="button" id="mUndo" title="Remove the last waypoint (Backspace)">Undo point</button>
+      <button type="button" id="mReset">Clear</button>
+      <button type="button" id="mClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $$ = function (i) { return document.getElementById(i); };
+  var cvEl = $$('cv'), c2 = cvEl.getContext('2d');
+  var panel = $$('measure');
+  var pts = [], legs = [], mode = false;
+
+  // sensible starting multipliers, matched loosely against terrain names
+  var GUESS = [
+    [/plain|grass|farm|field|steppe|open/i, 1],
+    [/road|trail|track/i, 0.75],
+    [/forest|wood|jungle|taiga/i, 1.5],
+    [/hill|down|upland|badland/i, 1.5],
+    [/mountain|peak|alpine/i, 2],
+    [/swamp|marsh|bog|fen/i, 2],
+    [/desert|dune|waste/i, 1.5],
+    [/tundra|ice|glacier|snow/i, 1.5],
+    [/water|ocean|sea|lake|river/i, 0]
+  ];
+  function guess(name) {
+    for (var i = 0; i < GUESS.length; i++) if (GUESS[i][0].test(name)) return GUESS[i][1];
+    return 1;
+  }
+
+  function cfg() {
+    var s = state.settings;
+    if (!s.travel) s.travel = { miles: 6, pace: 24, costs: {} };
+    return s.travel;
+  }
+
+  function terrains() {
+    var t = (state.pipeline && state.pipeline.terrainColors) ? Object.keys(state.pipeline.terrainColors) : [];
+    return t.sort();
+  }
+
+  function costOf(col, row) {
+    var t = cfg().costs;
+    var h = (typeof pipeHex === 'function') ? pipeHex(col, row) : null;
+    if (!h || !h.terrain) return 1;                 // unmapped ground: assume open
+    var v = t[h.terrain];
+    return (v === undefined) ? guess(h.terrain) : v;
+  }
+
+  // ---- offset <-> cube, matching the app's own layouts ----
+  // flat orientation shifts odd columns down (odd-q); pointy shifts odd rows right (odd-r)
+  function toCube(col, row) {
+    if (state.settings.orient === 'flat') {
+      var q = col, r = row - (col - (col & 1)) / 2;
+      return [q, r, -q - r];
+    }
+    var q2 = col - (row - (row & 1)) / 2;
+    return [q2, row, -q2 - row];
+  }
+  function toOffset(q, r) {
+    if (state.settings.orient === 'flat') return { col: q, row: r + (q - (q & 1)) / 2 };
+    return { col: q + (r - (r & 1)) / 2, row: r };
+  }
+  function hexDist(a, b) {
+    var x = toCube(a.col, a.row), y = toCube(b.col, b.row);
+    return (Math.abs(x[0] - y[0]) + Math.abs(x[1] - y[1]) + Math.abs(x[2] - y[2])) / 2;
+  }
+  var DIRS = [[1,-1,0],[1,0,-1],[0,1,-1],[-1,1,0],[-1,0,1],[0,-1,1]];
+
+  // ---- least-cost route ----
+  function route(a, b) {
+    var pad = 8;
+    var lo = { col: Math.min(a.col, b.col) - pad, row: Math.min(a.row, b.row) - pad };
+    var hi = { col: Math.max(a.col, b.col) + pad, row: Math.max(a.row, b.row) + pad };
+    var inBox = function (o) { return o.col >= lo.col && o.col <= hi.col && o.row >= lo.row && o.row <= hi.row; };
+
+    var key = function (o) { return o.col + ',' + o.row; };
+    var open = [{ o: a, f: 0 }], g = {}, from = {};
+    g[key(a)] = 0;
+    var guard = 0;
+
+    while (open.length && guard++ < 60000) {
+      open.sort(function (m, n) { return m.f - n.f; });
+      var cur = open.shift().o, ck = key(cur);
+      if (ck === key(b)) break;
+      var cube = toCube(cur.col, cur.row);
+      for (var d = 0; d < 6; d++) {
+        var nb = toOffset(cube[0] + DIRS[d][0], cube[1] + DIRS[d][1]);
+        if (!inBox(nb)) continue;
+        var mult = costOf(nb.col, nb.row);
+        if (!(mult > 0)) continue;                   // impassable
+        var nk = key(nb), ng = g[ck] + mult;
+        if (g[nk] === undefined || ng < g[nk]) {
+          g[nk] = ng; from[nk] = cur;
+          open.push({ o: nb, f: ng + hexDist(nb, b) });
+        }
+      }
+    }
+
+    var bk = key(b);
+    if (g[bk] === undefined) return null;
+    var out = [b], cur2 = b;
+    while (key(cur2) !== key(a)) { cur2 = from[key(cur2)]; if (!cur2) return null; out.unshift(cur2); }
+    return { hexes: out, cost: g[bk] };
+  }
+
+  // ---- output ----
+  function nameOf(h) {
+    var L = (typeof letterLabel === 'function') ? letterLabel(h.col, h.row) : null;
+    return L || label(h.col, h.row);
+  }
+
+  function recompute() {
+    legs = [];
+    for (var i = 1; i < pts.length; i++) legs.push(route(pts[i - 1], pts[i]));
+  }
+
+  function fmtTime(days) {
+    if (days < 1) return (days * 8).toFixed(1) + ' hr';
+    return days.toFixed(1) + (days < 2 ? ' day' : ' days');
+  }
+
+  function show() {
+    var out = $$('mOut');
+    if (!pts.length) {
+      out.innerHTML = '<p class="hint">Click your starting hex, then each stop along the way.</p>';
+      return;
+    }
+    if (pts.length === 1) {
+      out.innerHTML = '<p class="hint">Starting at <b>' + nameOf(pts[0]) +
+        '</b>. Click the next stop — add as many as you like to trace a road or skirt a range.</p>';
+      return;
+    }
+
+    var t = cfg(), miles = +t.miles || 6, pace = +t.pace || 24;
+    var totalCost = 0, totalHexes = 0, blocked = 0;
+    var rows = '';
+
+    for (var i = 0; i < legs.length; i++) {
+      var lg = legs[i], a = pts[i], b = pts[i + 1];
+      if (!lg) {
+        blocked++;
+        rows += '<tr class="blocked"><td class="n">' + (i + 1) + '</td><th>' + nameOf(a) + ' \u2192 ' +
+                nameOf(b) + '</th><td>blocked</td></tr>';
+        continue;
+      }
+      var hx = lg.hexes.length - 1;
+      totalCost += lg.cost; totalHexes += hx;
+      rows += '<tr><td class="n">' + (i + 1) + '</td><th>' + nameOf(a) + ' \u2192 ' + nameOf(b) +
+              '</th><td>' + fmtTime(lg.cost * miles / pace) + '</td></tr>';
+    }
+
+    var travelled = totalCost * miles;
+    var straight = hexDist(pts[0], pts[pts.length - 1]);
+
+    out.innerHTML =
+      '<div class="big">' + fmtTime(travelled / pace) + '</div>' +
+      '<table>' +
+      '<tr><th>Stops</th><td>' + pts.length + '</td></tr>' +
+      '<tr><th>Route</th><td>' + totalHexes + ' hex' + (totalHexes === 1 ? '' : 'es') + '</td></tr>' +
+      '<tr><th>Effective</th><td>' + travelled.toFixed(1) + ' mi</td></tr>' +
+      '<tr><th>Direct line</th><td>' + straight + ' hex' + (straight === 1 ? '' : 'es') + '</td></tr>' +
+      '</table>' +
+      '<div class="legs"><table>' + rows + '</table></div>' +
+      (blocked ? '<p class="hint warn">' + blocked + ' leg' + (blocked === 1 ? '' : 's') +
+        ' cannot be routed — impassable terrain. Raise a cost above 0 to open a way through.</p>' : '') +
+      (totalHexes > straight ? '<p class="hint">' + (totalHexes - straight) + ' hex' +
+        (totalHexes - straight === 1 ? '' : 'es') + ' longer than flying it.</p>' : '');
+  }
+
+  function buildTerrainRows() {
+    var host = $$('mTerr'), list = terrains(), t = cfg();
+    host.innerHTML = '';
+    if (!list.length) {
+      host.innerHTML = '<span style="grid-column:1/3">No pipeline loaded — every hex costs 1.</span>';
+      return;
+    }
+    list.forEach(function (name) {
+      if (t.costs[name] === undefined) t.costs[name] = guess(name);
+      var s = document.createElement('span'); s.textContent = name; s.title = name;
+      var i = document.createElement('input');
+      i.type = 'number'; i.min = '0'; i.step = '0.25'; i.value = t.costs[name];
+      i.oninput = function () {
+        t.costs[name] = +this.value;
+        recompute(); show(); draw();
+        save();
+      };
+      host.appendChild(s); host.appendChild(i);
+    });
+  }
+
+  // ---- overlay ----
+  var _draw = draw;
+  draw = function () {
+    _draw();
+    if (!mode || !pts.length) return;
+    c2.save();
+    var dpr = window.devicePixelRatio || 1;
+    c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    legs.forEach(function (lg) {
+      if (!lg || lg.hexes.length < 2) return;
+      c2.beginPath();
+      lg.hexes.forEach(function (h, i) {
+        var ctr = hexCenter(h.col, h.row), p = toScreen(ctr.x, ctr.y);
+        if (i) c2.lineTo(p[0], p[1]); else c2.moveTo(p[0], p[1]);
+      });
+      c2.strokeStyle = '#d4a24e'; c2.lineWidth = 3; c2.lineJoin = 'round';
+      c2.setLineDash([9, 6]); c2.stroke(); c2.setLineDash([]);
+    });
+
+    // blocked legs get a straight red hint so the gap is obvious
+    legs.forEach(function (lg, i) {
+      if (lg) return;
+      var a = hexCenter(pts[i].col, pts[i].row), b = hexCenter(pts[i + 1].col, pts[i + 1].row);
+      var p = toScreen(a.x, a.y), q = toScreen(b.x, b.y);
+      c2.beginPath(); c2.moveTo(p[0], p[1]); c2.lineTo(q[0], q[1]);
+      c2.strokeStyle = '#d47b6a'; c2.lineWidth = 2; c2.setLineDash([3, 5]);
+      c2.stroke(); c2.setLineDash([]);
+    });
+
+    var rad = Math.max(6, state.settings.hexSize * cam.zoom * 0.22);
+    pts.forEach(function (h, i) {
+      var ctr = hexCenter(h.col, h.row), p = toScreen(ctr.x, ctr.y);
+      var last = i === pts.length - 1;
+      c2.beginPath(); c2.arc(p[0], p[1], rad, 0, Math.PI * 2);
+      c2.fillStyle = i === 0 ? '#7fb069' : (last ? '#d47b6a' : '#d4a24e');
+      c2.strokeStyle = '#1b1813'; c2.lineWidth = 2;
+      c2.fill(); c2.stroke();
+      if (pts.length > 2) {
+        c2.fillStyle = '#1b1813';
+        c2.font = 'bold ' + Math.round(rad * 1.1) + 'px Georgia';
+        c2.textAlign = 'center'; c2.textBaseline = 'middle';
+        c2.fillText(String(i + 1), p[0], p[1] + 1);
+      }
+    });
+    c2.restore();
+  };
+
+  // ---- click interception, ahead of the app's own handler ----
+  document.getElementById('canvasWrap').addEventListener('click', function (e) {
+    if (!mode || typeof panned !== 'undefined' && panned) return;
+    var rect = cvEl.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+    e.stopPropagation();
+    var w = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+    var h = pixelToHex(w[0], w[1]);
+    var last = pts[pts.length - 1];
+    if (last && last.col === h.col && last.row === h.row) return;   // ignore a repeat click
+    pts.push({ col: h.col, row: h.row });
+    recompute(); show(); draw();
+  }, true);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && mode) { stop(); }
+    else if (e.key === 'Backspace' && mode &&
+             !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+      e.preventDefault(); pts.pop(); recompute(); show(); draw();
+    }
+    else if (e.key.toLowerCase() === 'm' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+      mode ? stop() : start();
+    }
+  });
+
+  function start() {
+    mode = true; pts = []; legs = [];
+    panel.classList.add('on');
+    var t = cfg();
+    $$('mMiles').value = t.miles; $$('mPace').value = t.pace;
+    buildTerrainRows(); show(); draw();
+    if (typeof setStatus === 'function') setStatus('measuring — click each stop · Backspace undoes · Esc stops', 'live');
+  }
+  function stop() {
+    mode = false; pts = []; legs = [];
+    panel.classList.remove('on'); draw();
+  }
+
+  $$('mMiles').oninput = function () { cfg().miles = +this.value || 6; show(); save(); };
+  $$('mPace').onchange = function () { cfg().pace = +this.value; show(); save(); };
+  $$('mReset').onclick = function () { pts = []; legs = []; show(); draw(); };
+  $$('mUndo').onclick = function () { pts.pop(); recompute(); show(); draw(); };
+  $$('mClose').onclick = stop;
+
+  var host = $$('exportBtn') && $$('exportBtn').parentNode;
+  if (host) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = 'Measure';
+    b.title = 'Distance and travel time between two hexes (M)';
+    b.onclick = function () { mode ? stop() : start(); };
+    host.appendChild(b);
+  }
+})();
+</script>
+<!-- ===================== END MEASURE ===================== -->
+
+</body>
+</html>
