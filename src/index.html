@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- GENERIC BUILD — campaign tables removed by make-generic.py -->
 <meta charset="UTF-8">
 <title>Hexcrawl Mapper</title>
 <style>
@@ -78,7 +79,7 @@
     <label><input type="checkbox" id="showCoords"> coords</label>
   </div>
   <div class="group">
-    <label class="btn" title="Load Map Pipeline/map-data.json — terrain colours, regions and Darlene coords">Pipeline<input type="file" id="pipeFile" accept=".json" hidden></label>
+    <label class="btn" title="Load Map Pipeline/map-data.json — terrain colours, regions and world coords">Pipeline<input type="file" id="pipeFile" accept=".json" hidden></label>
     <label title="Tint hexes by pipeline terrain"><input type="checkbox" id="showTerrain"> terrain</label>
   </div>
   <div class="group">
@@ -90,9 +91,6 @@
   </div>
   <div class="group">
     <button id="exportBtn">Export</button>
-    <button id="obsidianBtn" title="Generate an Obsidian note: your map + clickable hexes linking to vault notes. Alt-click to recalibrate.">Obsidian note</button>
-    <button id="publishBtn" title="Generate a note for Obsidian Publish: hexes link to your wiki permalinks. Alt-click to recalibrate.">Publish note</button>
-    <button id="webBtn" title="Generate a standalone index.html for GitHub Pages: zoomable map, hexes link to your wiki. Alt-click to recalibrate.">Web map</button>
     <button id="hexNotesBtn" title="Write hexes/&lt;region&gt;/{x}_{y}.md stubs for the Hexmaker pipeline. Alt-click to recalibrate.">Hex notes</button>
     <label class="btn">Import<input type="file" id="importFile" accept=".json" hidden></label>
   </div>
@@ -129,7 +127,7 @@ const SQ3 = Math.sqrt(3);
 const COLORS = ['#d4a24e', '#7fb069', '#6a9fd4', '#d47b6a', '#b58ad4', '#e0e0e0'];
 let state = {
   settings: { hexSize: 48, offX: 0, offY: 0, orient: 'flat', gridColor: '#e8e0cf', gridAlpha: 45, showCoords: false,
-              showTerrain: false, darleneColOff: 100, darleneRowOff: 57, vaultAnchorX: 4, vaultAnchorY: 5 },
+              showTerrain: false, darleneColOff: 0, darleneRowOff: 0, worldLabelName: '', gridCols: 10, gridRows: 8, vaultAnchorX: 4, vaultAnchorY: 5 },
   notes: {},   // key "col,row" -> {title, body, color, icon}
   icons: {},   // id -> {name, dataURL}
   mapName: null, mapDataURL: null,
@@ -358,7 +356,7 @@ function offsetToAxial(col, row) {
   return { q: col - (row - (row & 1)) / 2, r: row };
 }
 // ---------- pipeline dataset + coordinate reconciliation ----------
-// Three grids reconcile through Ritterstadt: D5 = vault 4_5 = Darlene 104.62.
+// Three grids reconcile through the anchor hex you calibrate against.
 // The anchor is the tool-space hex the user clicked during calibration.
 let pipeIndex = null;
 function buildPipeIndex() {
@@ -380,9 +378,10 @@ function letterLabel(col, row) {
   if (p && p.cols && p.rows && (v.x > p.cols || v.y > p.rows)) return null;
   return String.fromCharCode(64 + v.x) + v.y;
 }
-function darleneLabel(col, row) {
+function worldLabel(col, row) {
   const v = vaultCoord(col, row);
   if (!v) return null;
+  if (!state.settings.worldLabelName) return null;
   const s = state.settings;
   // prefer the value the pipeline actually recorded; fall back to the arithmetic
   const rec = pipeIndex && pipeIndex[v.x + '_' + v.y];
@@ -471,7 +470,7 @@ function draw() {
         ctx.fillText(LL || label(col, row), x, y - sz * 0.55);
         if (LL && sz > 26) {
           ctx.globalAlpha = 0.38; ctx.font = (sz * 0.20) + 'px Georgia';
-          ctx.fillText(darleneLabel(col, row) || '', x, y - sz * 0.32);
+          ctx.fillText(worldLabel(col, row) || '', x, y - sz * 0.32);
           ctx.font = (sz * 0.28) + 'px Georgia';
         }
         ctx.restore();
@@ -533,8 +532,8 @@ cv.addEventListener('mousemove', e => {
   const parts = ['Hex ' + label(h.col, h.row)];
   const LL = letterLabel(h.col, h.row);
   if (LL) parts.push(LL);
-  const D = darleneLabel(h.col, h.row);
-  if (D) parts.push('Darlene ' + D);
+  const D = worldLabel(h.col, h.row);
+  if (D) parts.push((state.settings.worldLabelName || 'World') + ' ' + D);
   const ph = pipeHex(h.col, h.row);
   if (ph && ph.terrain) parts.push(ph.terrain);
   badge.textContent = parts.join('  \u00b7  ') + (n && n.title ? '  \u2014  ' + n.title : '');
@@ -550,7 +549,7 @@ cv.addEventListener('click', e => {
     state.settings.anchor = { col: h.col, row: h.row };
     save(); draw();
     if (pendingMode === 'hexnotes') exportHexNotes();
-    else exportMapNote(pendingMode || 'obsidian');
+    else exportHexNotes();
     return;
   }
   openEditor(h.col + ',' + h.row);
@@ -801,11 +800,11 @@ function hexNoteBody(col, row) {
   const ph = pipeHex(col, row);
   const note = state.notes[col + ',' + row];
   const v = vaultCoord(col, row);
-  const dar = darleneLabel(col, row);
+  const dar = worldLabel(col, row);
   const terrain = (ph && ph.terrain) || '';
-  const region = (ph && ph.region) || terrain || 'West Marches';
+  const region = (ph && ph.region) || terrain || 'Unsorted';
   let out = '---\n';
-  if (dar) out += 'darlene: "' + dar + '"\n';
+  if (dar) out += (state.settings.worldLabelName || 'world').toLowerCase() + ': "' + dar + '"\n';
   if (terrain) out += 'terrain: ' + terrain + '\n';
   out += 'region: ' + region + '\n';
   out += '---\n\n';
@@ -872,32 +871,9 @@ async function exportHexNotes() {
 }
 
 // ---------- obsidian / publish note export ----------
-const OBSIDIAN_VAULT = 'A Tourist In Greyhawk';
-const HEX_NOTE_DIR = 'Greyhawk University/02. Geography & Atlas/Hexmaker World/hexes/West Marches/';
-const POI_DIR = 'Greyhawk University/02. Geography & Atlas/Hex POIs/';
-const POI_NOTES = {
-  A2: 'A2 - The Frozen Library', B2: 'B2 - The Mire-Sunk Chapel', B6: 'B6 - The Drowned Bell',
-  C1: 'C1 - The Sevenfold Hush', C2: "C2 - Greldannor's Tooth", D3: 'D3 - Drowned Kessmark',
-  D4: 'D4 - The Rust Seams', E3: 'E3 - Ochre Escarpment', F2: 'F2 - The Weeping Cairns',
-  F6: 'F6 - The Antler Throne', G5: 'G5 - The Standing Stones', H4: 'H4 - The Glassed Hollow',
-  H7: 'H7 - The Verdigris Tomb', I6: 'I6 - The Marrowstone Reach', J8: "J8 - Ehlonna's Mount"
-};
-const TOWN_NOTE = 'Greyhawk University/05. The Hamlet of Ritterstadt/05. The Hamlet of Ritterstadt';
-const POI_PERMALINKS = {
-  A2: '/greyhawk-university/atlas/poi/a2-frozen-library', B2: '/greyhawk-university/atlas/poi/b2-mire-sunk-chapel',
-  B6: '/greyhawk-university/atlas/poi/b6-drowned-bell', C1: '/greyhawk-university/atlas/poi/c1-sevenfold-hush',
-  C2: '/greyhawk-university/atlas/poi/c2-greldannors-tooth', D3: '/greyhawk-university/atlas/poi/d3-drowned-kessmark',
-  D4: '/greyhawk-university/atlas/poi/d4-rust-seams', E3: '/greyhawk-university/atlas/poi/e3-ochre-escarpment',
-  F2: '/greyhawk-university/atlas/poi/f2-weeping-cairns', F6: '/greyhawk-university/atlas/poi/f6-antler-throne',
-  G5: '/greyhawk-university/atlas/poi/g5-standing-stones', H4: '/greyhawk-university/atlas/poi/h4-glassed-hollow',
-  H7: '/greyhawk-university/atlas/poi/h7-verdigris-tomb', I6: '/greyhawk-university/atlas/poi/i6-marrowstone-reach',
-  J8: '/greyhawk-university/atlas/poi/j8-ehlonnas-mount', D5: '/greyhawk-university/ritterstadt'
-};
 let calibrating = false, pendingMode = null;
 
-$('obsidianBtn').onclick = e => startExport('obsidian', e.altKey);
-$('publishBtn').onclick = e => startExport('publish', e.altKey);
-$('webBtn').onclick = e => startExport('web', e.altKey);
+
 $('hexNotesBtn').onclick = e => {
   if (e.altKey || !state.settings.anchor) {
     pendingMode = 'hexnotes'; calibrating = true;
@@ -906,93 +882,9 @@ $('hexNotesBtn').onclick = e => {
   }
   exportHexNotes();
 };
-function startExport(mode, recal) {
-  if (!img) { alert('Load your map image first.'); return; }
-  if (mode === 'hexnotes') { exportHexNotes(); return; }
-  pendingMode = mode;
-  if (!state.settings.anchor || recal) {
-    calibrating = true;
-    alert('One-time calibration: click your anchor location hex on the map.\nLetter coordinates appear after this.\n(Alt-click an export button any time to recalibrate.)');
-    return;
-  }
-  exportMapNote(mode);
-}
 
-function exportMapNote(mode) {
-  if (mode === 'web') {
-    const base = prompt('Your published wiki base URL (report links will point there):',
-      state.settings.wikiBase || 'https://publish.obsidian.md/YOUR-SITE');
-    if (base === null) return;
-    state.settings.wikiBase = base.replace(/\/+$/, ''); save();
-  }
-  const s = state.settings, a = s.anchor;
-  const dx = 4 - a.col, dy = 5 - a.row; // vault coord = tool coord + d
-  const uri = f => 'obsidian://open?vault=' + encodeURIComponent(OBSIDIAN_VAULT) + '&file=' + encodeURIComponent(f);
-  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const MAX = 1600, k = Math.min(1, MAX / Math.max(img.width, img.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  // wrap the base64 in short lines: browsers strip newlines inside URLs, but
-  // Obsidian's editor chokes on multi-MB single lines
-  const data = c.toDataURL('image/jpeg', 0.75).replace(/(.{200})/g, '$1\n');
-  let out = '<svg id="wm-hexmap" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + img.width + ' ' + img.height + '" style="max-width:100%;height:auto">';
-  out += '<image href="' + data + '" x="0" y="0" width="' + img.width + '" height="' + img.height + '"/>';
-  for (let X = 1; X <= 10; X++) for (let Y = 1; Y <= 8; Y++) {
-    const col = X - dx, row = Y - dy;
-    const { x, y } = hexCenter(col, row);
-    let pts = '';
-    for (let i = 0; i < 6; i++) { const [px, py] = hexCorner(x, y, i); pts += px.toFixed(1) + ',' + py.toFixed(1) + ' '; }
-    const L = String.fromCharCode(64 + X) + Y;
-    let href = null, tip = L;
-    if (mode === 'obsidian') {
-      const poi = POI_NOTES[L] ? POI_DIR + POI_NOTES[L] : (L === 'D5' ? TOWN_NOTE : null);
-      href = uri(poi || (HEX_NOTE_DIR + X + '_' + Y));
-      tip = L + ' — ' + (poi ? poi.replace(/^.*\//, '').replace(/^[A-J]\d+ - /, '').replace(/^05\. /, '') : 'hex note ' + X + '_' + Y);
-    } else if (POI_PERMALINKS[L]) {
-      href = (mode === 'web' ? (state.settings.wikiBase || '') : '') + POI_PERMALINKS[L];
-      tip = L + ' — ' + (POI_NOTES[L] ? POI_NOTES[L].replace(/^[A-J]\d+ - /, '') : 'Ritterstadt');
-    }
-    let cell = '<polygon points="' + pts.trim() + '" fill="#ffffff" fill-opacity="0.01" stroke="' + s.gridColor + '" stroke-opacity="' + (s.gridAlpha / 100).toFixed(2) + '" stroke-width="' + (s.hexSize * 0.05).toFixed(1) + '"><title>' + esc(tip) + '</title></polygon>'
-        + '<text x="' + x.toFixed(1) + '" y="' + (y - s.hexSize * 0.45).toFixed(1) + '" font-size="' + (s.hexSize * 0.3).toFixed(1) + '" font-family="Georgia" fill="' + s.gridColor + '" fill-opacity="0.65" text-anchor="middle">' + L + '</text>';
-    out += href ? '<a href="' + esc(href) + '">' + cell + '</a>' : cell;
-  }
-  out += '</svg>';
-  let md = '';
-  if (mode === 'obsidian') {
-    md = '---\ntags: [university, geography, hex-map, west-marches, interactive]\ndescription: "West Marches map — click a hex to open its note (POI note where one exists, hex note otherwise)."\n---\n\n# West Marches — Hex Map\n\n*Use reading view. Click a hex to open its note; POI hexes open the POI report directly. Regenerate any time from hexcrawl.html → “Obsidian note”.*\n\n' + out + '\n';
-  } else {
-    md = '---\npublish: true\npermalink: /greyhawk-university/atlas/west-marches-map\ntags: [university, geography, hex-map, west-marches]\ndescription: "Survey map of the West Marches — the Ritterstadt frontier. Click a marked hex to open its location report."\n---\n\n# West Marches — Survey Map\n\n*Greyhawk University Field Survey Office. Each hex ≈ 6 miles. Click a hex with a report on file to open it — unmarked wilderness is exactly that: unreported.*\n\n' + out + '\n';
-  }
-  let blob, fname;
-  if (mode === 'web') {
-    const page = '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
-      + '<meta name="viewport" content="width=device-width, initial-scale=1">'
-      + '<title>West Marches — Survey Map</title>'
-      + '<style>body{margin:0;background:#14110d;height:100vh;display:flex;flex-direction:column;font-family:Georgia,serif}'
-      + '#wrap{flex:1;min-height:0}#wrap svg{width:100%!important;height:100%!important;max-width:none!important;display:block;cursor:grab}'
-      + 'footer{color:#e8e0cf;opacity:.55;font-size:12px;padding:6px 12px}</style></head><body>'
-      + '<div id="wrap">' + out + '</div>'
-      + '<footer>West Marches — Greyhawk University Field Survey Office. Drag to pan, scroll to zoom, click a marked hex for its report.</footer>'
-      + '<scr' + 'ipt>(function(){var svg=document.getElementById("wm-hexmap");var vb=svg.viewBox.baseVal,drag=null;'
-      + 'svg.addEventListener("wheel",function(e){e.preventDefault();var k=e.deltaY<0?0.85:1.18;'
-      + 'var pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;var p=pt.matrixTransform(svg.getScreenCTM().inverse());'
-      + 'vb.x=p.x-(p.x-vb.x)*k;vb.y=p.y-(p.y-vb.y)*k;vb.width*=k;vb.height*=k;},{passive:false});'
-      + 'svg.addEventListener("mousedown",function(e){drag=[e.clientX,e.clientY];svg.style.cursor="grabbing";});'
-      + 'window.addEventListener("mouseup",function(){drag=null;svg.style.cursor="grab";});'
-      + 'window.addEventListener("mousemove",function(e){if(!drag)return;var sc=vb.width/svg.clientWidth;'
-      + 'vb.x-=(e.clientX-drag[0])*sc;vb.y-=(e.clientY-drag[1])*sc;drag=[e.clientX,e.clientY];});'
-      + '})();</scr' + 'ipt></body></html>';
-    blob = new Blob([page], { type: 'text/html' }); fname = 'index.html';
-  } else {
-    blob = new Blob([md], { type: 'text/markdown' });
-    fname = mode === 'obsidian' ? 'West Marches Map (Obsidian).md' : 'West Marches Map (Publish).md';
-  }
-  const el = document.createElement('a');
-  el.href = URL.createObjectURL(blob);
-  el.download = fname;
-  el.click(); URL.revokeObjectURL(el.href);
-}
+
+
 
 // ---------- boot ----------
 window.addEventListener('resize', draw);
@@ -1431,7 +1323,7 @@ load().then(async () => {
       cells.push(cell);
     }
 
-    var title = prompt('Title for the player map:', (state.mapName || 'West Marches') + ' — Player Map');
+    var title = prompt('Title for the player map:', (state.mapName || 'Unsorted') + ' — Player Map');
     if (title === null) return;
 
     var data = {
